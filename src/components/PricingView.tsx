@@ -19,6 +19,7 @@ import { firebaseService } from '../services/firebaseService';
 import { cn } from '../lib/utils';
 import { useAuth } from '../providers/FirebaseProvider';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+import ComparisonTable from './ComparisonTable';
 
 const VALID_COUPONS: Record<string, number> = {
   "WELCOME50": 0.50, // -50% discount
@@ -29,11 +30,12 @@ const showCouponField = true;
 
 interface PricingViewProps {
   currentSub?: any;
+  settings?: any;
   onPurchased?: () => void;
   setActiveTab?: (tab: string) => void;
 }
 
-export default function PricingView({ currentSub, onPurchased, setActiveTab }: PricingViewProps) {
+export default function PricingView({ currentSub, settings, onPurchased, setActiveTab }: PricingViewProps) {
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [paypalClientId, setPaypalClientId] = useState('');
@@ -41,87 +43,102 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
   const [annualDiscount, setAnnualDiscount] = useState(20);
   const { user } = useAuth();
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [matrixConfig, setMatrixConfig] = useState<any>(null);
   
   // Coupon State
   const [promoCode, setPromoCode] = useState('');
   const [activeDiscount, setActiveDiscount] = useState(0);
   const [couponError, setCouponError] = useState(false);
 
+  const getFeaturesForPack = (matrix: any, packId: string, defaultFeatures: string[]) => {
+    if (!matrix?.packs?.[packId]) return defaultFeatures;
+    const activeIds = matrix.packs[packId].activeFeatures || [];
+    if (!Array.isArray(activeIds) || activeIds.length === 0) return defaultFeatures;
+    
+    const mapped = activeIds.map((id: string) => {
+      const feat = matrix.features?.find((f: any) => f.id === id);
+      return feat?.label || id;
+    }).filter(Boolean);
+
+    return mapped.length > 0 ? mapped : defaultFeatures;
+  };
+
+  const getComputedPlans = (matrix: any) => {
+    return [
+      {
+        id: 'trial',
+        name: matrix?.packs?.test?.name || 'TEST VISION',
+        price: matrix?.packs?.test?.price ? parseInt(String(matrix.packs.test.price).replace(/[^0-9]/g, '')) : 0,
+        duration_hours: 24,
+        site_limit: 1,
+        features: getFeaturesForPack(matrix, 'test', [
+          'Accès Complet IA (1 WordPress)',
+          'Support Prioritaire'
+        ])
+      },
+      {
+        id: 'starter',
+        name: matrix?.packs?.starter?.name || 'STARTER PROTOCOL',
+        price: matrix?.packs?.starter?.price ? parseInt(String(matrix.packs.starter.price).replace(/[^0-9]/g, '')) : 29,
+        site_limit: 1,
+        features: getFeaturesForPack(matrix, 'starter', [
+          'Manager Produits, Catégories & Tags',
+          'Audit SEO (Analyses de base)',
+          'Maintenance & Paramètres',
+          'Comm Hub (Read-Only Mode)'
+        ])
+      },
+      {
+        id: 'pro',
+        name: matrix?.packs?.pro?.name || 'PRO NEXUS',
+        price: matrix?.packs?.pro?.price ? parseInt(String(matrix.packs.pro.price).replace(/[^0-9]/g, '')) : 89,
+        site_limit: 5,
+        is_popular: true,
+        features: getFeaturesForPack(matrix, 'pro', [
+          'Machine à Contenu & Maillage',
+          'Nexus Social & Smart Shopping',
+          'Comm Hub Core SMTP Engine'
+        ])
+      },
+      {
+        id: 'elite',
+        name: matrix?.packs?.elite?.name || 'ELITE VISION',
+        price: matrix?.packs?.elite?.price ? parseInt(String(matrix.packs.elite.price).replace(/[^0-9]/g, '')) : 249,
+        site_limit: 12,
+        features: getFeaturesForPack(matrix, 'elite', [
+          'Intelligence Marché & Analyse Stocks',
+          'Nexus Forecast (IA Predictive)',
+          'Auto-Pilote (Full automated)',
+          'Newsletter Blast & AI Recovery'
+        ])
+      }
+    ];
+  };
+
   useEffect(() => {
-    const init = async () => {
-      setLoading(true);
+    const initData = async () => {
       try {
-        const [_, cid, settings] = await Promise.all([
-          firebaseService.getPlans(),
+        if (!settings || Object.keys(settings).length === 0) {
+          setLoading(true);
+        }
+
+        const [cid, settingsData] = await Promise.all([
           firebaseService.getPaypalClientId(),
-          firebaseService.getSettings()
+          settings && Object.keys(settings).length > 0 ? Promise.resolve(settings) : firebaseService.getSettings()
         ]);
 
-        const matrixConfig = settings['nexus_matrix_config'] ? JSON.parse(settings['nexus_matrix_config']) : null;
-
-        // Official Premium Pricing Configuration
-        const premiumPlans = [
-          {
-            id: 'trial',
-            name: matrixConfig?.packs?.test?.name || 'TEST VISION',
-            price: matrixConfig?.packs?.test?.price ? parseInt(matrixConfig.packs.test.price) : 0,
-            duration_hours: 24,
-            site_limit: 1,
-            features: matrixConfig?.packs?.test?.activeFeatures?.map((id: string) => 
-                matrixConfig.features.find((f: any) => f.id === id)?.label || id
-              ) || [
-              'Accès Complet IA (1 WordPress)',
-              'Support Prioritaire'
-            ]
-          },
-          {
-            id: 'starter',
-            name: matrixConfig?.packs?.starter?.name || 'STARTER PROTOCOL',
-            price: matrixConfig?.packs?.starter?.price ? parseInt(matrixConfig.packs.starter.price) : 29,
-            site_limit: 1,
-            features: matrixConfig?.packs?.starter?.activeFeatures?.map((id: string) => 
-                matrixConfig.features.find((f: any) => f.id === id)?.label || id
-              ) || [
-              'Manager Produits, Catégories & Tags',
-              'Audit SEO (Analyses de base)',
-              'Maintenance & Paramètres',
-              'Comm Hub (Read-Only Mode)'
-            ]
-          },
-          {
-            id: 'pro',
-            name: matrixConfig?.packs?.pro?.name || 'PRO NEXUS',
-            price: matrixConfig?.packs?.pro?.price ? parseInt(matrixConfig.packs.pro.price) : 89,
-            site_limit: 5,
-            is_popular: true,
-            features: matrixConfig?.packs?.pro?.activeFeatures?.map((id: string) => 
-                matrixConfig.features.find((f: any) => f.id === id)?.label || id
-              ) || [
-              'Machine à Contenu & Maillage',
-              'Nexus Social & Smart Shopping',
-              'Comm Hub Core SMTP Engine'
-            ]
-          },
-          {
-            id: 'elite',
-            name: matrixConfig?.packs?.elite?.name || 'ELITE VISION',
-            price: matrixConfig?.packs?.elite?.price ? parseInt(matrixConfig.packs.elite.price) : 249,
-            site_limit: 12,
-            features: matrixConfig?.packs?.elite?.activeFeatures?.map((id: string) => 
-                matrixConfig.features.find((f: any) => f.id === id)?.label || id
-              ) || [
-              'Intelligence Marché & Analyse Stocks',
-              'Nexus Forecast (IA Predictive)',
-              'Auto-Pilote (Full automated)',
-              'Newsletter Blast & AI Recovery'
-            ]
-          }
-        ];
-
-        setPlans(premiumPlans);
+        const currentSettings = (settings && Object.keys(settings).length > 0) ? settings : settingsData;
+        const configRaw = currentSettings?.['nexus_matrix_config'];
+        const matrixData = configRaw 
+          ? (typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw) 
+          : null;
+        
+        setMatrixConfig(matrixData);
+        setPlans(getComputedPlans(matrixData));
         setPaypalClientId(cid);
-        if (settings['annual_discount_percentage']) {
-          setAnnualDiscount(Number(settings['annual_discount_percentage']));
+        
+        if (currentSettings?.['annual_discount_percentage']) {
+          setAnnualDiscount(Number(currentSettings['annual_discount_percentage']));
         }
       } catch (err) {
         console.error('Failed to init Pricing', err);
@@ -129,8 +146,8 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
         setLoading(false);
       }
     };
-    init();
-  }, []);
+    initData();
+  }, [settings]);
 
   const handleApplyCoupon = () => {
     const code = promoCode.toUpperCase();
@@ -364,14 +381,18 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
                           </span>
                         )}
                         <span className={cn(
-                          "text-4xl font-black transition-all duration-500 italic",
+                          "text-3xl font-black transition-all duration-500 italic",
                           hasDiscount ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)] scale-110" : "text-white"
                         )}>
                           {finalPrice}$
                         </span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-600 uppercase">
-                        / {isTrial ? `${(plan.duration_hours || 1) * 60} Min` : (billingCycle === 'monthly' ? 'Mois' : 'An')}
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
+                        / {isTrial ? (
+                          (plan.duration_hours >= 1) 
+                            ? `${plan.duration_hours} HEURE${plan.duration_hours > 1 ? 'S' : ''}` 
+                            : `${(plan.duration_hours || 1) * 60} MIN`
+                        ) : (billingCycle === 'monthly' ? 'Mois' : 'An')}
                       </span>
                     </div>
                   </div>
@@ -477,6 +498,8 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
           );
         })}
       </div>
+
+      {matrixConfig && <ComparisonTable config={matrixConfig} />}
 
       {/* Affiliate Program Promotion */}
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900/20 to-blue-900/10 border border-blue-500/20 rounded-[3rem] p-12 group">

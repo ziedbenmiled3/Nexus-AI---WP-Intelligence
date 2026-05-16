@@ -1,6 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  doc, 
+  getDocFromServer,
+  terminate,
+  clearIndexedDbPersistence
+} from 'firebase/firestore';
 import localConfig from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -14,20 +20,36 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+
+// Use initializeFirestore with experimentalForceLongPolling to bypass potential connection issues
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId || '(default)');
+
 export const auth = getAuth(app);
 
 // Validate Connection to Firestore
 async function testConnection() {
   try {
+    console.log('[Firebase] Initiating connection test to database:', firebaseConfig.firestoreDatabaseId);
     // Testing connection to a dummy doc
     await getDocFromServer(doc(db, 'system', 'connection_test'));
     console.log('[Firebase] Connection successful');
-  } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("[Firebase] Please check your Firebase configuration: Client is offline.");
-    } else {
-      console.warn('[Firebase] Connection test result:', error);
+  } catch (error: any) {
+    console.error('[Firebase] Connection Error:', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
+    
+    if (error.code === 'unavailable') {
+      console.warn('[Firebase] Service unavailable. This might be a transient network issue. Retrying with persistence clear...');
+      try {
+        await terminate(db);
+        await clearIndexedDbPersistence(db);
+      } catch (e) {
+        console.error('[Firebase] Failed to reset persistence:', e);
+      }
     }
   }
 }

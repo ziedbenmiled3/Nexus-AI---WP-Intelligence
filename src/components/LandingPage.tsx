@@ -20,10 +20,11 @@ import {
   Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../lib/utils';
+import { cn, safeJsonParse } from '../lib/utils';
 import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
 import { firebaseService } from '../services/firebaseService';
+import ComparisonTable from './ComparisonTable';
 
 const FALLBACK_PLANS = [
   { id: 'trial', name: 'Test Vision', price: 0, site_limit: 1, description: 'Testez toutes les fonctionnalités pendant 60 minutes' },
@@ -36,14 +37,17 @@ export default function LandingPage({
   onSelectPlan, 
   lang, 
   onLangChange,
-  externalPlans
+  externalPlans,
+  settings
 }: { 
   onSelectPlan: (planId: string) => void,
   lang: 'fr' | 'en',
   onLangChange: (lang: 'fr' | 'en') => void,
-  externalPlans?: any[]
+  externalPlans?: any[],
+  settings?: any
 }) {
   const [plans, setPlans] = useState<any[]>(FALLBACK_PLANS);
+  const [matrixConfig, setMatrixConfig] = useState<any>(null);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [activeFeature, setActiveFeature] = useState(0);
   const [currentView, setCurrentView] = useState<'home' | 'privacy' | 'terms'>('home');
@@ -51,32 +55,63 @@ export default function LandingPage({
   const [annualDiscount, setAnnualDiscount] = useState(20);
 
   useEffect(() => {
-    if (externalPlans && externalPlans.length > 0) {
-      setPlans(externalPlans);
-      return;
-    }
-
-    const initData = async () => {
+    const syncData = async () => {
       try {
-        const [plansData, settings] = await Promise.all([
-          firebaseService.getPlans(),
-          firebaseService.getSettings()
-        ]);
+        const plansSource = (externalPlans && externalPlans.length > 0) 
+          ? externalPlans 
+          : await firebaseService.getPlans();
         
-        if (Array.isArray(plansData) && plansData.length > 0) {
-          const sorted = [...plansData].sort((a: any, b: any) => (a.price || 0) - (b.price || 0));
-          setPlans(sorted);
-        }
+        const settingsSource = (settings && Object.keys(settings).length > 0)
+          ? settings
+          : await firebaseService.getSettings();
+
+        const configRaw = settingsSource?.['nexus_matrix_config'];
+        const matrixData = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, null) : configRaw) : null;
+        setMatrixConfig(matrixData);
+
+        const getFeaturesForPack = (packId: string, defaultFeatures: string[]) => {
+          if (!matrixData?.packs?.[packId]) return defaultFeatures;
+          const activeIds = matrixData.packs[packId].activeFeatures || [];
+          if (!Array.isArray(activeIds) || activeIds.length === 0) return defaultFeatures;
+          
+          const mapped = activeIds.map((id: string) => {
+            const feat = matrixData.features?.find((f: any) => f.id === id);
+            return feat?.label || id;
+          }).filter(Boolean);
+
+          return mapped.length > 0 ? mapped : defaultFeatures;
+        };
+
+        const plansToSync = (Array.isArray(plansSource) && plansSource.length > 0) ? plansSource : FALLBACK_PLANS;
         
-        if (settings && settings['annual_discount_percentage']) {
-          setAnnualDiscount(Number(settings['annual_discount_percentage']));
+        const syncedPlans = plansToSync.map(plan => {
+          const planId = String(plan.id).toLowerCase();
+          const matrixPack = matrixData?.packs?.[planId === 'trial' ? 'test' : planId];
+          
+          if (matrixPack) {
+            return {
+              ...plan,
+              name: matrixPack.name || plan.name,
+              price: matrixPack.price ? parseInt(String(matrixPack.price).replace(/[^0-9]/g, '')) : plan.price,
+              features: getFeaturesForPack(planId === 'trial' ? 'test' : planId, plan.features || [])
+            };
+          }
+          return plan;
+        });
+
+        const sorted = [...syncedPlans].sort((a: any, b: any) => (a.price || 0) - (b.price || 0));
+        setPlans(sorted);
+        
+        if (settingsSource?.['annual_discount_percentage']) {
+          setAnnualDiscount(Number(settingsSource['annual_discount_percentage']));
         }
       } catch (err) {
-        console.error('[Landing] Failed to fetch data', err);
+        console.error('[Landing] Failed to sync data', err);
       }
     };
-    initData();
-  }, [externalPlans]);
+
+    syncData();
+  }, [externalPlans, settings]);
 
   useEffect(() => {
     if (!lang) return;
@@ -520,11 +555,11 @@ export default function LandingPage({
                     
                       <div className="flex flex-col items-center mb-10">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-7xl font-display font-black italic tracking-tighter text-white">
+                          <span className="text-5xl font-display font-black italic tracking-tighter text-white">
                             {displayPrice}
                           </span>
                           <span className="text-lg font-bold text-slate-600 uppercase">{isTrial ? '' : '$'}</span>
-                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">
                             / {isTrial ? (
                               (plan.duration_hours >= 1) 
                                 ? `${plan.duration_hours} HEURE${plan.duration_hours > 1 ? 'S' : ''}` 
@@ -539,35 +574,16 @@ export default function LandingPage({
                         )}
                       </div>
 
-                    <div className="w-full space-y-3 mb-10">
-                      <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 group-hover:bg-indigo-500/5 transition-all text-left">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span className="text-[9px] font-black uppercase tracking-widest text-white">
-                          {plan.site_limit} {t('wordpress_sites', 'SITES WORDPRESS')}
-                        </span>
+                      <div className="w-full space-y-3 mb-10">
+                        {plan.features?.slice(0, 5).map((feature: string, fIdx: number) => (
+                          <div key={fIdx} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 opacity-80 text-left">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white truncate">
+                              {feature}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      {isTrial ? (
-                        <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 opacity-80 text-left">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-white">
-                            SESSION {plan.duration_hours >= 1 ? `${plan.duration_hours} HEURE${plan.duration_hours > 1 ? 'S' : ''}` : `${(plan.duration_hours || 1) * 60} MINUTES`}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 opacity-60 text-left">
-                          <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-white">
-                            {t('nexus_protocol_access', 'ACCÈS PROTOCOLE IA')}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 opacity-60 text-left">
-                        <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
-                        <span className="text-[9px] font-black uppercase tracking-widest text-white">
-                          {isTrial ? 'SANS ENGAGEMENT' : t('priority_support', 'SUPPORT 24/7 PRIORITY')}
-                        </span>
-                      </div>
-                    </div>
 
                     <button 
                       onClick={() => onSelectPlan(plan.id)}
@@ -592,6 +608,12 @@ export default function LandingPage({
               </div>
             )}
           </div>
+
+          {matrixConfig && (
+            <div className="mt-20">
+               <ComparisonTable config={matrixConfig} />
+            </div>
+          )}
         </div>
       </section>
 

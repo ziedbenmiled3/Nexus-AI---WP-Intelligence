@@ -560,7 +560,7 @@ export default function App() {
   }
 
   if (showLanding) {
-    return <LandingPage onSelectPlan={handleSelectPlan} lang={lang} onLangChange={handleLangChange} externalPlans={plans} />;
+    return <LandingPage onSelectPlan={handleSelectPlan} lang={lang} onLangChange={handleLangChange} externalPlans={plans} settings={settings} />;
   }
 
   if (authStep === 'register') {
@@ -688,8 +688,10 @@ export default function App() {
   ];
 
   // Matrix Filter Logic
-  const matrixConfig = settings?.['nexus_matrix_config'] ? safeJsonParse(settings['nexus_matrix_config'], null) : null;
-  const userPlanId = subscription?.plan_id || 'none';
+  const configRaw = settings?.['nexus_matrix_config'];
+  const matrixConfig = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, null) : configRaw) : null;
+  let userPlanId = subscription?.plan_id || 'none';
+  if (userPlanId === 'trial') userPlanId = 'test';
   
   const filteredGroupedTabs = groupedSiteTabs.map(group => {
     // If no config or super admin, show everything
@@ -922,7 +924,7 @@ export default function App() {
               {activeTab === 'market' && config && <CompetitorView config={config} />}
               {activeTab === 'internal-links' && config && <InternalLinkView config={config} />}
               {activeTab === 'maintenance' && config && <MaintenanceView config={config} />}
-              {activeTab === 'pricing' && <PricingView currentSub={subscription} onPurchased={() => user?.email && fetchSubscription(user.email)} setActiveTab={setActiveTab} />}
+              {activeTab === 'pricing' && <PricingView currentSub={subscription} settings={settings} onPurchased={() => user?.email && fetchSubscription(user.email)} setActiveTab={setActiveTab} />}
               {activeTab === 'super' && <SuperAdminView setActiveTab={setActiveTab} />}
               {activeTab === 'vision' && <div className="p-8 text-slate-500 font-black uppercase tracking-widest text-center mt-20">Vision Succès en cours de développement...</div>}
               {activeTab === 'sites' && <SitesView currentConfig={config} onSwitch={handleSwitchSite} currentSub={subscription} sites={sites} setSites={setSites} />}
