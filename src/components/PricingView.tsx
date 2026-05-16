@@ -65,14 +65,22 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
             price: 0,
             duration_hours: 24,
             site_limit: 1,
-            features: ['Full IA Access', '1 WordPress Site', 'Priority Support']
+            features: [
+              'Accès Complet IA (1 WordPress)',
+              'Support Prioritaire'
+            ]
           },
           {
             id: 'starter',
             name: 'STARTER PROTOCOL',
             price: 29,
             site_limit: 1,
-            features: ['AI Product Manager', 'Basic SEO Audit', 'Maintenance', 'Nexus Mailer (Read-Only)']
+            features: [
+              'Manager Produits, Catégories & Tags',
+              'Audit SEO (Analyses de base)',
+              'Maintenance & Paramètres',
+              'Comm Hub (Read-Only Mode)'
+            ]
           },
           {
             id: 'pro',
@@ -80,14 +88,23 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
             price: 89,
             site_limit: 5,
             is_popular: true,
-            features: ['Content Machine', 'Internal Link Engine', 'Nexus Social', 'WooCommerce SMTP Core']
+            features: [
+              'Machine à Contenu & Maillage',
+              'Nexus Social & Smart Shopping',
+              'Comm Hub Core SMTP Engine'
+            ]
           },
           {
             id: 'elite',
             name: 'ELITE VISION',
             price: 249,
             site_limit: 12,
-            features: ['Market Intelligence', 'Nexus Forecast', 'Full Auto-Pilot', 'Unlimited Newsletter Blast', 'AI Cart Abandonment Recovery']
+            features: [
+              'Intelligence Marché & Analyse Stocks',
+              'Nexus Forecast (IA Predictive)',
+              'Auto-Pilote (Full automated)',
+              'Newsletter Blast & AI Recovery'
+            ]
           }
         ];
 
@@ -293,12 +310,17 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
               className={cn(
                 "relative group flex flex-col p-10 rounded-[3rem] border transition-all duration-500 h-full overflow-hidden",
                 isPopular 
-                  ? "bg-gradient-to-br from-indigo-950/20 to-blue-950/20 border-blue-500 shadow-2xl shadow-blue-900/30 ring-1 ring-blue-400/20" 
+                  ? "bg-slate-950 border-transparent shadow-[0_0_50px_-12px_rgba(124,58,237,0.3)]" 
                   : isCurrent 
                     ? "bg-blue-600/10 border-blue-500 shadow-2xl shadow-blue-900/20" 
                     : "bg-[#0c0e14] border-slate-800 hover:border-slate-700"
               )}
             >
+              {isPopular && (
+                <div className="absolute inset-0 rounded-[3rem] p-[2px] bg-gradient-to-br from-[#7c3aed] to-[#3b82f6] -z-10 animate-pulse-slow">
+                  <div className="absolute inset-0 bg-slate-950 rounded-[calc(3rem-2px)]" />
+                </div>
+              )}
               {isPopular && (
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none group-hover:scale-110 transition-transform duration-1000">
                    <Crown className="w-40 h-40 text-blue-500" />
