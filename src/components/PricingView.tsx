@@ -1,0 +1,383 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Zap, 
+  Check, 
+  Crown, 
+  Sparkles,
+  Shield,
+  Layers,
+  ShoppingBag,
+  Loader2,
+  AlertCircle,
+  Database,
+  Tag,
+  Users
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { firebaseService } from '../services/firebaseService';
+import { cn } from '../lib/utils';
+import { useAuth } from '../providers/FirebaseProvider';
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+
+interface PricingViewProps {
+  currentSub?: any;
+  onPurchased?: () => void;
+  setActiveTab?: (tab: string) => void;
+}
+
+export default function PricingView({ currentSub, onPurchased, setActiveTab }: PricingViewProps) {
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [paypalClientId, setPaypalClientId] = useState('');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [annualDiscount, setAnnualDiscount] = useState(20);
+  const { user } = useAuth();
+  const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      try {
+        const [p, cid, settings] = await Promise.all([
+          firebaseService.getPlans(),
+          firebaseService.getPaypalClientId(),
+          firebaseService.getSettings()
+        ]);
+        setPlans(p || []);
+        setPaypalClientId(cid);
+        if (settings['annual_discount_percentage']) {
+          setAnnualDiscount(Number(settings['annual_discount_percentage']));
+        }
+      } catch (err) {
+        console.error('Failed to init Pricing', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+  }, []);
+
+  const handlePurchaseSuccess = async (plan: any, details: any) => {
+    try {
+      await firebaseService.subscribe(
+        user!.email!, 
+        plan.id, 
+        details.id, 
+        plan.price
+      );
+      setStatus({ type: 'success', message: `Nexus Activé : Bienvenue au Pack ${plan.name} !` });
+      if (onPurchased) onPurchased();
+    } catch (err) {
+      setStatus({ type: 'error', message: "Erreur lors de l'activation de votre abonnement." });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+        <p className="text-slate-500 font-black uppercase tracking-[0.3em] text-[10px]">Ouverture du Portail NEXUS...</p>
+      </div>
+    );
+  }
+
+  if (plans.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-6 text-center px-6">
+        <div className="w-20 h-20 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-center text-slate-500">
+           <Database className="w-10 h-10 opacity-20" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-black text-white italic uppercase">Boutique Nexus fermée</h2>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest max-w-xs">Contactez l'administration pour configurer les offres de service.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-12 pb-20 px-6">
+      <div className="text-center space-y-4">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-600/10 border border-blue-500/20 rounded-full text-blue-500 text-[9px] font-black uppercase tracking-widest"
+        >
+           <Crown className="w-3 h-3" />
+           Nexus Phase III Protocol
+        </motion.div>
+        <h1 className="text-5xl md:text-6xl font-black text-white italic uppercase tracking-tighter leading-none">
+          ACCÉDEZ À LA VISION
+        </h1>
+        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em]">Optimisation multisite par Intelligence Artificielle</p>
+      </div>
+
+      {/* Billing Selector */}
+      <div className="flex justify-center">
+        <div className="bg-[#0c0e14] border border-slate-800 p-1.5 rounded-3xl flex items-center relative gap-1">
+          <button 
+            onClick={() => setBillingCycle('monthly')}
+            className={cn(
+              "relative z-10 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+              billingCycle === 'monthly' ? "text-white" : "text-slate-500 hover:text-slate-400"
+            )}
+          >
+            Mensuel
+          </button>
+          <button 
+            onClick={() => setBillingCycle('yearly')}
+            className={cn(
+              "relative z-10 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              billingCycle === 'yearly' ? "text-white" : "text-slate-500 hover:text-slate-400"
+            )}
+          >
+            Annuel
+            <span className="bg-amber-600/20 text-amber-500 px-2 py-0.5 rounded-lg text-[8px]">-{annualDiscount}%</span>
+          </button>
+          
+          {/* Slider Background */}
+          <motion.div 
+            className="absolute h-[calc(100%-12px)] bg-blue-600 rounded-2xl shadow-xl shadow-blue-900/20"
+            initial={false}
+            animate={{
+              left: billingCycle === 'monthly' ? 6 : '50%',
+              width: 'calc(50% - 9px)'
+            }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          />
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {status && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className={cn(
+              "p-6 rounded-[2rem] border flex items-center gap-4 max-w-2xl mx-auto",
+              status.type === 'success' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-red-500/10 border-red-500/20 text-red-500"
+            )}
+          >
+            {status.type === 'success' ? <Shield className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
+            <p className="text-xs font-black uppercase tracking-widest flex-1">{status.message}</p>
+            <button onClick={() => setStatus(null)} className="text-[10px] opacity-50 hover:opacity-100 font-black uppercase">Fermer</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {plans.map((plan, i) => {
+          const isCurrent = currentSub?.plan_id === plan.id && currentSub?.status === 'active';
+          const isTrial = plan.id === 'trial';
+          
+          const monthlyPrice = (plan.is_promo && plan.promo_price) ? plan.promo_price : plan.price;
+          const displayPrice = billingCycle === 'monthly' 
+            ? monthlyPrice 
+            : Math.floor((monthlyPrice * 12) * (1 - annualDiscount / 100));
+          
+          const monthlyEquivalent = billingCycle === 'monthly' 
+            ? monthlyPrice 
+            : (displayPrice / 12).toFixed(1);
+
+          return (
+            <motion.div
+              key={plan.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className={cn(
+                "relative group flex flex-col p-10 rounded-[3rem] border transition-all duration-500 h-full",
+                isCurrent 
+                  ? "bg-blue-600/10 border-blue-500 shadow-2xl shadow-blue-900/20" 
+                  : "bg-[#0c0e14] border-slate-800 hover:border-slate-700"
+              )}
+            >
+              {isCurrent && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1.5 bg-blue-600 text-white rounded-full text-[8px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/40">
+                  Plan Actuel
+                </div>
+              )}
+
+              <div className="space-y-6 flex-1">
+                <div className="space-y-1">
+                  <div className="flex justify-between items-start">
+                    <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter leading-none">{plan.name}</h3>
+                    {(plan.is_promo && plan.promo_label) || (billingCycle === 'yearly' && plan.id !== 'trial') ? (
+                      <span className="px-2 py-0.5 bg-emerald-500 text-[8px] font-black text-white rounded uppercase tracking-widest animate-pulse flex items-center gap-1">
+                        <Tag className="w-2.5 h-2.5" />
+                        {billingCycle === 'yearly' ? `ECO -${annualDiscount}%` : plan.promo_label}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-black text-white italic">{displayPrice}$</span>
+                      <span className="text-[10px] font-bold text-slate-600 uppercase">/ {isTrial ? `${(plan.duration_hours || 1) * 60} Min` : (billingCycle === 'monthly' ? 'Mois' : 'An')}</span>
+                    </div>
+                    {billingCycle === 'yearly' && plan.id !== 'trial' && (
+                      <p className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest mt-1">
+                        soit {monthlyEquivalent}$ / mois
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="h-[1px] bg-white/5 w-full" />
+
+                <ul className="space-y-4">
+                  <li className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                    <div className="w-5 h-5 rounded-lg bg-blue-600/10 flex items-center justify-center shrink-0 border border-blue-500/10">
+                      <Layers className="w-3 h-3 text-blue-500" />
+                    </div>
+                    {plan.site_limit} Site{plan.site_limit > 1 ? 's' : ''} Connecté{plan.site_limit > 1 ? 's' : ''}
+                  </li>
+                  {Array.isArray(plan.features) ? plan.features.map((feature: string, idx: number) => (
+                    <li key={idx} className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                      <div className="w-5 h-5 rounded-lg bg-blue-600/10 flex items-center justify-center shrink-0 border border-blue-500/10">
+                        <Zap className="w-3 h-3 text-blue-500" />
+                      </div>
+                      {feature}
+                    </li>
+                  )) : (
+                    <>
+                      <li className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                        <div className="w-5 h-5 rounded-lg bg-blue-600/10 flex items-center justify-center shrink-0 border border-blue-500/10">
+                          <Zap className="w-3 h-3 text-blue-500" />
+                        </div>
+                        Sync Automatique 24/7
+                      </li>
+                      <li className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                        <div className="w-5 h-5 rounded-lg bg-blue-600/10 flex items-center justify-center shrink-0 border border-blue-500/10">
+                          <Shield className="w-3 h-3 text-blue-500" />
+                        </div>
+                        Nexus AI Security Audit
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+
+              <div className="mt-12 pt-6">
+                {isCurrent ? (
+                  <div className="w-full py-4 bg-slate-900 border border-white/5 text-slate-500 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                    <Layers className="w-4 h-4 opacity-50" />
+                    Protocol Enabled
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {!paypalClientId && !isTrial && (
+                      <div className="p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl text-[9px] font-black text-yellow-500/60 uppercase tracking-widest text-center">
+                         Passerelle non configurée
+                      </div>
+                    )}
+
+                    {isTrial || plan.price === 0 ? (
+                      <button 
+                        onClick={async () => {
+                          if (!user) {
+                            alert("Veuillez vous connecter.");
+                            return;
+                          }
+                          await firebaseService.subscribe(user.email!, plan.id);
+                          setStatus({ type: 'success', message: 'Nexus Trial Activé !' });
+                          if (onPurchased) onPurchased();
+                        }}
+                        className="w-full py-4 bg-white text-black hover:bg-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                      >
+                         Activer Trial
+                      </button>
+                    ) : (
+                      paypalClientId && (
+                        <div className="relative z-[0]">
+                          <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD" }}>
+                            <PayPalButtons 
+                               style={{ layout: "vertical", shape: "rect", label: "pay", color: "blue", height: 48 }}
+                               createOrder={(data, actions) => {
+                                 return actions.order.create({
+                                   purchase_units: [
+                                     {
+                                       amount: {
+                                         currency_code: 'USD',
+                                         value: displayPrice.toString(),
+                                       },
+                                       description: `Pack NEXUS PHASE III - ${plan.name} (${billingCycle === 'monthly' ? 'Mensuel' : 'Annuel'})`
+                                     },
+                                   ],
+                                   intent: 'CAPTURE'
+                                 });
+                               }}
+                               onApprove={async (data, actions) => {
+                                  const details = await actions.order?.capture();
+                                  handlePurchaseSuccess(plan, details);
+                               }}
+                            />
+                          </PayPalScriptProvider>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Affiliate Program Promotion */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900/20 to-blue-900/10 border border-blue-500/20 rounded-[3rem] p-12 group">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 blur-[100px] rounded-full" />
+        <div className="flex flex-col md:flex-row items-center justify-between gap-12 relative z-10">
+          <div className="space-y-4 max-w-xl text-center md:text-left">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-[8px] font-black uppercase tracking-widest">
+              <Users className="w-3 h-3" />
+              Programme Partenaires
+            </div>
+            <h3 className="text-3xl font-black text-white italic uppercase tracking-tighter leading-tight">
+              DEVENEZ PARTENAIRE NEXUS & TOUCHEZ JUSQU'À <span className="text-blue-500">30%</span> DE COMMISSION
+            </h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-loose">
+              Recommandez l'intelligence Nexus à votre réseau et générez des revenus passifs. 
+              Paiements automatiques via PayPal dès 50$ de gains.
+            </p>
+          </div>
+          <div className="flex flex-col items-center gap-4 shrink-0">
+            <div className="grid grid-cols-3 gap-3">
+              {[5, 15, 30].map(pct => (
+                <div key={pct} className="px-4 py-3 bg-black/40 border border-slate-800 rounded-2xl text-center">
+                  <div className="text-xl font-black text-blue-500 italic">{pct}%</div>
+                  <div className="text-[7px] font-black text-slate-600 uppercase tracking-tighter">Commission</div>
+                </div>
+              ))}
+            </div>
+            <button 
+              onClick={() => setActiveTab?.('affiliates')}
+              className="w-full px-8 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-500 transition-all shadow-xl shadow-blue-900/40"
+            >
+              REJOINDRE LE RÉSEAU PARTENAIRE
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-12 bg-slate-900/20 border border-slate-800 rounded-[3rem] text-center space-y-6 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/5 blur-[120px] rounded-full pointer-events-none group-hover:scale-125 transition-transform duration-1000" />
+        <div className="relative z-10 space-y-4">
+          <div className="w-16 h-16 bg-blue-600/10 rounded-3xl flex items-center justify-center mx-auto border border-blue-500/20">
+            <Sparkles className="w-8 h-8 text-blue-500" />
+          </div>
+          <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter">NEXUS MULTI-VERSE</h3>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest max-w-xl mx-auto leading-loose">
+            Gestion massive de flottes WordPress (100+ sites). Accès exclusif aux API Beta NEXUS.
+          </p>
+          <button 
+            onClick={() => window.location.href = `mailto:vision@nexus.ai?subject=Commande Nexus Multi-verse&body=Bonjour, je souhaite commander un pack Vision Custom pour ma flotte de sites.`}
+            className="px-8 py-3 border border-white/5 text-[10px] font-black text-white hover:bg-white/5 rounded-full uppercase tracking-[0.3em] transition-all"
+          >
+            COMMANDER VISION CUSTOM →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,203 @@
+{
+  "entities": {
+    "plan": {
+      "title": "Plan",
+      "description": "Subscription plans available in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "promo_price": { "type": "number" },
+        "is_promo": { "type": "boolean" },
+        "promo_label": { "type": "string" },
+        "site_limit": { "type": "integer" },
+        "description": { "type": "string" },
+        "duration_hours": { "type": "number" },
+        "features": { 
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "name", "price", "site_limit"]
+    },
+    "subscription": {
+      "title": "Subscription",
+      "description": "User subscription status",
+      "type": "object",
+      "properties": {
+        "user_email": { "type": "string" },
+        "plan_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive", "cancelled"] },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_email", "plan_id", "status"]
+    },
+    "site": {
+      "title": "WordPress Site",
+      "description": "User's connected WordPress sites",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_email": { "type": "string" },
+        "url": { "type": "string" },
+        "username": { "type": "string" },
+        "application_password": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "user_email", "url", "username", "application_password"]
+    },
+    "payment": {
+      "title": "Payment",
+      "description": "Payment transactions record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_email": { "type": "string" },
+        "plan_id": { "type": "string" },
+        "amount": { "type": "number" },
+        "transaction_id": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "user_email", "plan_id", "amount", "transaction_id"]
+    },
+    "translation": {
+      "title": "Translation",
+      "description": "Internationalization strings for landing page",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "lang": { "type": "string" },
+        "value": { "type": "string" }
+      },
+      "required": ["key", "lang", "value"]
+    },
+    "setting": {
+      "title": "Global Setting",
+      "description": "System wide settings",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" }
+      },
+      "required": ["key", "value"]
+    },
+    "user_offer": {
+      "title": "User Offer",
+      "description": "Special offers or messages for users",
+      "type": "object",
+      "properties": {
+        "user_email": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "status": { "type": "string", "enum": ["unread", "read"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_email", "title", "content"]
+    },
+    "user": {
+      "title": "User Profile",
+      "description": "Registered user profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "display_name": { "type": "string" },
+        "photo_url": { "type": "string" },
+        "last_login": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "order": {
+      "title": "WooCommerce Order",
+      "description": "Transactional order data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "order_number": { "type": "string" },
+        "customer_name": { "type": "string" },
+        "customer_email": { "type": "string" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "cancelled"] },
+        "items_count": { "type": "integer" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "order_number", "total", "status", "customer_email"]
+    },
+    "customer": {
+      "title": "WooCommerce Customer",
+      "description": "Customer profile and stats",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "full_name": { "type": "string" },
+        "email": { "type": "string" },
+        "total_spend": { "type": "number" },
+        "orders_count": { "type": "integer" },
+        "last_order": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["id", "email", "full_name"]
+    },
+    "addon": {
+      "title": "Addon",
+      "description": "One-time micro-purchase items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" }
+      },
+      "required": ["id", "name", "price"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "System users collection"
+    },
+    "/orders/{orderId}": {
+      "schema": "order",
+      "description": "WooCommerce orders collection"
+    },
+    "/customers/{customerId}": {
+      "schema": "customer",
+      "description": "WooCommerce customers collection"
+    },
+    "/addons/{addonId}": {
+      "schema": "addon",
+      "description": "Collection of one-time purchase addons"
+    },
+    "/plans/{planId}": {
+      "schema": "plan",
+      "description": "Collection of subscription plans"
+    },
+    "/subscriptions/{userId}": {
+      "schema": "subscription",
+      "description": "User subscription detail (doc ID is user ID)"
+    },
+    "/sites/{siteId}": {
+      "schema": "site",
+      "description": "All WordPress sites across users"
+    },
+    "/payments/{paymentId}": {
+      "schema": "payment",
+      "description": "History of all payment transactions"
+    },
+    "/translations/{translationId}": {
+      "schema": "translation",
+      "description": "UI translations"
+    },
+    "/settings/{settingId}": {
+      "schema": "setting",
+      "description": "System settings"
+    },
+    "/user_offers/{offerId}": {
+      "schema": "user_offer",
+      "description": "Special offers sent to users"
+    }
+  }
+}
