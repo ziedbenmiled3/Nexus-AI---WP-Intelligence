@@ -3,21 +3,29 @@ import {
   Zap, 
   Check, 
   Crown, 
-  Sparkles,
-  Shield,
-  Layers,
-  ShoppingBag,
-  Loader2,
-  AlertCircle,
-  Database,
-  Tag,
-  Users
+  Sparkles, 
+  Shield, 
+  Layers, 
+  ShoppingBag, 
+  Loader2, 
+  AlertCircle, 
+  Database, 
+  Tag, 
+  Users,
+  Ticket
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
 import { cn } from '../lib/utils';
 import { useAuth } from '../providers/FirebaseProvider';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+
+const VALID_COUPONS: Record<string, number> = {
+  "WELCOME50": 0.50, // -50% discount
+  "LAUNCH30": 0.30   // -30% discount
+};
+
+const showCouponField = true;
 
 interface PricingViewProps {
   currentSub?: any;
@@ -33,17 +41,57 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
   const [annualDiscount, setAnnualDiscount] = useState(20);
   const { user } = useAuth();
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  
+  // Coupon State
+  const [promoCode, setPromoCode] = useState('');
+  const [activeDiscount, setActiveDiscount] = useState(0);
+  const [couponError, setCouponError] = useState(false);
 
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       try {
-        const [p, cid, settings] = await Promise.all([
+        const [_, cid, settings] = await Promise.all([
           firebaseService.getPlans(),
           firebaseService.getPaypalClientId(),
           firebaseService.getSettings()
         ]);
-        setPlans(p || []);
+
+        // Official Premium Pricing Configuration
+        const premiumPlans = [
+          {
+            id: 'trial',
+            name: 'TEST VISION',
+            price: 0,
+            duration_hours: 24,
+            site_limit: 1,
+            features: ['Full IA Access', '1 WordPress Site', 'Priority Support']
+          },
+          {
+            id: 'starter',
+            name: 'STARTER PROTOCOL',
+            price: 29,
+            site_limit: 1,
+            features: ['AI Product Manager', 'Basic SEO Audit', 'Maintenance', 'Nexus Mailer (Read-Only)']
+          },
+          {
+            id: 'pro',
+            name: 'PRO NEXUS',
+            price: 89,
+            site_limit: 5,
+            is_popular: true,
+            features: ['Content Machine', 'Internal Link Engine', 'Nexus Social', 'WooCommerce SMTP Core']
+          },
+          {
+            id: 'elite',
+            name: 'ELITE VISION',
+            price: 249,
+            site_limit: 12,
+            features: ['Market Intelligence', 'Nexus Forecast', 'Full Auto-Pilot', 'Unlimited Newsletter Blast', 'AI Cart Abandonment Recovery']
+          }
+        ];
+
+        setPlans(premiumPlans);
         setPaypalClientId(cid);
         if (settings['annual_discount_percentage']) {
           setAnnualDiscount(Number(settings['annual_discount_percentage']));
@@ -56,6 +104,18 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
     };
     init();
   }, []);
+
+  const handleApplyCoupon = () => {
+    const code = promoCode.toUpperCase();
+    if (VALID_COUPONS[code]) {
+      setActiveDiscount(VALID_COUPONS[code]);
+      setCouponError(false);
+    } else {
+      setActiveDiscount(0);
+      setCouponError(true);
+      setTimeout(() => setCouponError(false), 2000);
+    }
+  };
 
   const handlePurchaseSuccess = async (plan: any, details: any) => {
     try {
@@ -112,13 +172,13 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em]">Optimisation multisite par Intelligence Artificielle</p>
       </div>
 
-      {/* Billing Selector */}
-      <div className="flex justify-center">
-        <div className="bg-[#0c0e14] border border-slate-800 p-1.5 rounded-3xl flex items-center relative gap-1">
+      {/* Billing Selector & Coupon */}
+      <div className="flex flex-col items-center gap-8">
+        <div className="bg-[#0c0e14] border border-slate-800 p-1.5 rounded-3xl flex items-center relative gap-1 shadow-2xl">
           <button 
             onClick={() => setBillingCycle('monthly')}
             className={cn(
-              "relative z-10 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+              "relative z-10 px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
               billingCycle === 'monthly' ? "text-white" : "text-slate-500 hover:text-slate-400"
             )}
           >
@@ -127,7 +187,7 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
           <button 
             onClick={() => setBillingCycle('yearly')}
             className={cn(
-              "relative z-10 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              "relative z-10 px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
               billingCycle === 'yearly' ? "text-white" : "text-slate-500 hover:text-slate-400"
             )}
           >
@@ -135,9 +195,8 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
             <span className="bg-amber-600/20 text-amber-500 px-2 py-0.5 rounded-lg text-[8px]">-{annualDiscount}%</span>
           </button>
           
-          {/* Slider Background */}
           <motion.div 
-            className="absolute h-[calc(100%-12px)] bg-blue-600 rounded-2xl shadow-xl shadow-blue-900/20"
+            className="absolute h-[calc(100%-12px)] bg-blue-600 rounded-2xl shadow-xl shadow-blue-900/40"
             initial={false}
             animate={{
               left: billingCycle === 'monthly' ? 6 : '50%',
@@ -146,6 +205,44 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
           />
         </div>
+
+        {showCouponField && (
+           <div className="w-full max-w-sm">
+              <div className={cn(
+                "group bg-black/40 border rounded-[2rem] p-1.5 flex transition-all duration-500",
+                activeDiscount > 0 ? "border-emerald-500/50 shadow-lg shadow-emerald-900/10" : couponError ? "border-red-500/50 animate-shake" : "border-white/5 hover:border-white/10"
+              )}>
+                 <div className="flex-1 flex items-center px-6 gap-3">
+                    <Ticket className={cn("w-4 h-4", activeDiscount > 0 ? "text-emerald-500" : "text-slate-600")} />
+                    <input 
+                      type="text"
+                      placeholder="CODE PROMO / OFFRE"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value)}
+                      className="bg-transparent border-none outline-none text-[10px] font-black uppercase tracking-widest text-white placeholder:text-slate-700 w-full"
+                    />
+                 </div>
+                 <button 
+                   onClick={handleApplyCoupon}
+                   className={cn(
+                     "px-6 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shrink-0",
+                     activeDiscount > 0 ? "bg-emerald-600 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                   )}
+                 >
+                   {activeDiscount > 0 ? 'APPLIQUÉ' : 'VÉRIFIER'}
+                 </button>
+              </div>
+              {activeDiscount > 0 && (
+                <motion.p 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center text-[9px] font-black text-emerald-500 uppercase tracking-widest mt-3"
+                >
+                  OFFRE ACTIVÉE : -{activeDiscount * 100}% DÉDUITS
+                </motion.p>
+              )}
+           </div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -172,13 +269,20 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
           const isTrial = plan.id === 'trial';
           
           const monthlyPrice = (plan.is_promo && plan.promo_price) ? plan.promo_price : plan.price;
-          const displayPrice = billingCycle === 'monthly' 
+          
+          // Original Display Price
+          const baseDisplayPrice = billingCycle === 'monthly' 
             ? monthlyPrice 
             : Math.floor((monthlyPrice * 12) * (1 - annualDiscount / 100));
+            
+          // Discounted Display Price
+          const finalPrice = activeDiscount > 0 && plan.price > 0
+            ? Math.floor(baseDisplayPrice * (1 - activeDiscount))
+            : baseDisplayPrice;
+
+          const hasDiscount = activeDiscount > 0 && plan.price > 0;
           
-          const monthlyEquivalent = billingCycle === 'monthly' 
-            ? monthlyPrice 
-            : (displayPrice / 12).toFixed(1);
+          const isPopular = plan.is_popular;
 
           return (
             <motion.div
@@ -187,39 +291,57 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
               className={cn(
-                "relative group flex flex-col p-10 rounded-[3rem] border transition-all duration-500 h-full",
-                isCurrent 
-                  ? "bg-blue-600/10 border-blue-500 shadow-2xl shadow-blue-900/20" 
-                  : "bg-[#0c0e14] border-slate-800 hover:border-slate-700"
+                "relative group flex flex-col p-10 rounded-[3rem] border transition-all duration-500 h-full overflow-hidden",
+                isPopular 
+                  ? "bg-gradient-to-br from-indigo-950/20 to-blue-950/20 border-blue-500 shadow-2xl shadow-blue-900/30 ring-1 ring-blue-400/20" 
+                  : isCurrent 
+                    ? "bg-blue-600/10 border-blue-500 shadow-2xl shadow-blue-900/20" 
+                    : "bg-[#0c0e14] border-slate-800 hover:border-slate-700"
               )}
             >
-              {isCurrent && (
+              {isPopular && (
+                <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none group-hover:scale-110 transition-transform duration-1000">
+                   <Crown className="w-40 h-40 text-blue-500" />
+                </div>
+              )}
+
+              {isPopular && (
+                <div className="absolute top-6 right-8 px-4 py-1.5 bg-blue-600 text-white rounded-full text-[8px] font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-900/40 italic flex items-center gap-1.5">
+                  <Crown className="w-3 h-3" />
+                  Most Popular
+                </div>
+              )}
+
+              {isCurrent && !isPopular && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1.5 bg-blue-600 text-white rounded-full text-[8px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/40">
                   Plan Actuel
                 </div>
               )}
 
-              <div className="space-y-6 flex-1">
+              <div className="space-y-6 flex-1 relative z-10">
                 <div className="space-y-1">
                   <div className="flex justify-between items-start">
                     <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter leading-none">{plan.name}</h3>
-                    {(plan.is_promo && plan.promo_label) || (billingCycle === 'yearly' && plan.id !== 'trial') ? (
-                      <span className="px-2 py-0.5 bg-emerald-500 text-[8px] font-black text-white rounded uppercase tracking-widest animate-pulse flex items-center gap-1">
-                        <Tag className="w-2.5 h-2.5" />
-                        {billingCycle === 'yearly' ? `ECO -${annualDiscount}%` : plan.promo_label}
-                      </span>
-                    ) : null}
                   </div>
                   <div className="flex flex-col">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-black text-white italic">{displayPrice}$</span>
-                      <span className="text-[10px] font-bold text-slate-600 uppercase">/ {isTrial ? `${(plan.duration_hours || 1) * 60} Min` : (billingCycle === 'monthly' ? 'Mois' : 'An')}</span>
+                    <div className="flex items-baseline gap-2">
+                      <div className="flex flex-col">
+                        {hasDiscount && (
+                          <span className="text-sm font-black text-slate-600 line-through decoration-red-500/50 mb-[-4px]">
+                            {baseDisplayPrice}$
+                          </span>
+                        )}
+                        <span className={cn(
+                          "text-4xl font-black transition-all duration-500 italic",
+                          hasDiscount ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)] scale-110" : "text-white"
+                        )}>
+                          {finalPrice}$
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-600 uppercase">
+                        / {isTrial ? `${(plan.duration_hours || 1) * 60} Min` : (billingCycle === 'monthly' ? 'Mois' : 'An')}
+                      </span>
                     </div>
-                    {billingCycle === 'yearly' && plan.id !== 'trial' && (
-                      <p className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest mt-1">
-                        soit {monthlyEquivalent}$ / mois
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -299,9 +421,9 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
                                      {
                                        amount: {
                                          currency_code: 'USD',
-                                         value: displayPrice.toString(),
+                                         value: finalPrice.toString(),
                                        },
-                                       description: `Pack NEXUS PHASE III - ${plan.name} (${billingCycle === 'monthly' ? 'Mensuel' : 'Annuel'})`
+                                       description: `Pack NEXUS PHASE III - ${plan.name} (${billingCycle === 'monthly' ? 'Mensuel' : 'Annuel'}) ${activeDiscount > 0 ? '[VOUCHER APPLIED]' : ''}`
                                      },
                                    ],
                                    intent: 'CAPTURE'
