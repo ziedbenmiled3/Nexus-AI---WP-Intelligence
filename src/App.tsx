@@ -687,6 +687,24 @@ export default function App() {
     }
   ];
 
+  // Matrix Filter Logic
+  const matrixConfig = settings?.['nexus_matrix_config'] ? safeJsonParse(settings['nexus_matrix_config'], null) : null;
+  const userPlanId = subscription?.plan_id || 'none';
+  
+  const filteredGroupedTabs = groupedSiteTabs.map(group => {
+    // If no config or super admin, show everything
+    if (!matrixConfig || isSuperAdmin) return group;
+    
+    // Find matching pack in matrix
+    const pack = matrixConfig.packs?.[userPlanId];
+    if (!pack) return group; // Plan trial/none might show default fallback or nothing
+
+    return {
+      ...group,
+      items: group.items.filter(item => pack.activeFeatures.includes(item.id))
+    };
+  }).filter(group => group.items.length > 0);
+
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden font-sans text-slate-200">
       {/* Sidebar */}
@@ -734,7 +752,7 @@ export default function App() {
           </div>
 
           {/* Site Management Grouped */}
-          {groupedSiteTabs.map((group, idx) => (
+          {filteredGroupedTabs.map((group, idx) => (
             <div key={idx} className="space-y-1">
               <h3 className="px-4 text-[9px] font-black text-slate-600 uppercase tracking-[0.4em] mb-4 opacity-50">{group.category}</h3>
               {group.items.map((tab) => (

@@ -57,25 +57,31 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
           firebaseService.getSettings()
         ]);
 
+        const matrixConfig = settings['nexus_matrix_config'] ? JSON.parse(settings['nexus_matrix_config']) : null;
+
         // Official Premium Pricing Configuration
         const premiumPlans = [
           {
             id: 'trial',
-            name: 'TEST VISION',
-            price: 0,
+            name: matrixConfig?.packs?.test?.name || 'TEST VISION',
+            price: matrixConfig?.packs?.test?.price ? parseInt(matrixConfig.packs.test.price) : 0,
             duration_hours: 24,
             site_limit: 1,
-            features: [
+            features: matrixConfig?.packs?.test?.activeFeatures?.map((id: string) => 
+                matrixConfig.features.find((f: any) => f.id === id)?.label || id
+              ) || [
               'Accès Complet IA (1 WordPress)',
               'Support Prioritaire'
             ]
           },
           {
             id: 'starter',
-            name: 'STARTER PROTOCOL',
-            price: 29,
+            name: matrixConfig?.packs?.starter?.name || 'STARTER PROTOCOL',
+            price: matrixConfig?.packs?.starter?.price ? parseInt(matrixConfig.packs.starter.price) : 29,
             site_limit: 1,
-            features: [
+            features: matrixConfig?.packs?.starter?.activeFeatures?.map((id: string) => 
+                matrixConfig.features.find((f: any) => f.id === id)?.label || id
+              ) || [
               'Manager Produits, Catégories & Tags',
               'Audit SEO (Analyses de base)',
               'Maintenance & Paramètres',
@@ -84,11 +90,13 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
           },
           {
             id: 'pro',
-            name: 'PRO NEXUS',
-            price: 89,
+            name: matrixConfig?.packs?.pro?.name || 'PRO NEXUS',
+            price: matrixConfig?.packs?.pro?.price ? parseInt(matrixConfig.packs.pro.price) : 89,
             site_limit: 5,
             is_popular: true,
-            features: [
+            features: matrixConfig?.packs?.pro?.activeFeatures?.map((id: string) => 
+                matrixConfig.features.find((f: any) => f.id === id)?.label || id
+              ) || [
               'Machine à Contenu & Maillage',
               'Nexus Social & Smart Shopping',
               'Comm Hub Core SMTP Engine'
@@ -96,10 +104,12 @@ export default function PricingView({ currentSub, onPurchased, setActiveTab }: P
           },
           {
             id: 'elite',
-            name: 'ELITE VISION',
-            price: 249,
+            name: matrixConfig?.packs?.elite?.name || 'ELITE VISION',
+            price: matrixConfig?.packs?.elite?.price ? parseInt(matrixConfig.packs.elite.price) : 249,
             site_limit: 12,
-            features: [
+            features: matrixConfig?.packs?.elite?.activeFeatures?.map((id: string) => 
+                matrixConfig.features.find((f: any) => f.id === id)?.label || id
+              ) || [
               'Intelligence Marché & Analyse Stocks',
               'Nexus Forecast (IA Predictive)',
               'Auto-Pilote (Full automated)',

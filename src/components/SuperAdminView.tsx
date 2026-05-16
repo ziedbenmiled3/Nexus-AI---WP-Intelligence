@@ -31,6 +31,8 @@ import { firebaseService } from '../services/firebaseService';
 import { useAuth } from '../providers/FirebaseProvider';
 import { cn } from '../lib/utils';
 
+import MatrixController from './MatrixController';
+
 export default function SuperAdminView({ setActiveTab }: { setActiveTab: (tab: string) => void }) {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -552,6 +554,9 @@ export default function SuperAdminView({ setActiveTab }: { setActiveTab: (tab: s
           </div>
         </div>
       </div>
+
+      {/* Matrix Controller Section */}
+      <MatrixController />
 
       {/* Pricing Configuration */}
       <div className="bg-[#0c0e14] border border-slate-800 rounded-[2.5rem] p-10 relative overflow-hidden group">
