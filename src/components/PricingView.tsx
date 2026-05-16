@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
-import { cn } from '../lib/utils';
+import { cn, safeJsonParse } from '../lib/utils';
 import { useAuth } from '../providers/FirebaseProvider';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import ComparisonTable from './ComparisonTable';
+import { DEFAULT_NEXUS_CONFIG } from '../constants';
 
 const VALID_COUPONS: Record<string, number> = {
   "WELCOME50": 0.50, // -50% discount
@@ -43,7 +44,7 @@ export default function PricingView({ currentSub, settings, onPurchased, setActi
   const [annualDiscount, setAnnualDiscount] = useState(20);
   const { user } = useAuth();
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const [matrixConfig, setMatrixConfig] = useState<any>(null);
+  const [matrixConfig, setMatrixConfig] = useState<any>(DEFAULT_NEXUS_CONFIG);
   
   // Coupon State
   const [promoCode, setPromoCode] = useState('');
@@ -56,8 +57,17 @@ export default function PricingView({ currentSub, settings, onPurchased, setActi
     if (!Array.isArray(activeIds) || activeIds.length === 0) return defaultFeatures;
     
     const mapped = activeIds.map((id: string) => {
-      const feat = matrix.features?.find((f: any) => f.id === id);
-      return feat?.label || id;
+      // Look through all categories to find the feature label
+      let featureLabel = id;
+      matrix.categories?.some((cat: any) => {
+        const feat = cat.features?.find((f: any) => f.id === id);
+        if (feat) {
+          featureLabel = feat.label;
+          return true;
+        }
+        return false;
+      });
+      return featureLabel;
     }).filter(Boolean);
 
     return mapped.length > 0 ? mapped : defaultFeatures;
@@ -129,10 +139,14 @@ export default function PricingView({ currentSub, settings, onPurchased, setActi
 
         const currentSettings = (settings && Object.keys(settings).length > 0) ? settings : settingsData;
         const configRaw = currentSettings?.['nexus_matrix_config'];
-        const matrixData = configRaw 
-          ? (typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw) 
-          : null;
+        let matrixData = configRaw 
+          ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) 
+          : DEFAULT_NEXUS_CONFIG;
         
+        if (!matrixData?.categories || !matrixData?.packs) {
+          matrixData = DEFAULT_NEXUS_CONFIG;
+        }
+
         setMatrixConfig(matrixData);
         setPlans(getComputedPlans(matrixData));
         setPaypalClientId(cid);
@@ -499,7 +513,17 @@ export default function PricingView({ currentSub, settings, onPurchased, setActi
         })}
       </div>
 
-      {matrixConfig && <ComparisonTable config={matrixConfig} />}
+      <section className="py-24 bg-[#0a0a0f]/50 border border-white/5 rounded-[4rem] px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-4xl font-display font-black text-white italic uppercase tracking-tighter mb-4">
+             GRILLE COMPARATIVE <span className="text-blue-500">NEXUS</span>
+          </h2>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em]">
+            Analyse détaillée des protocoles SaaS
+          </p>
+        </div>
+        <ComparisonTable config={matrixConfig || DEFAULT_NEXUS_CONFIG} />
+      </section>
 
       {/* Affiliate Program Promotion */}
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900/20 to-blue-900/10 border border-blue-500/20 rounded-[3rem] p-12 group">

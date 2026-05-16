@@ -51,6 +51,7 @@ import { cn, safeJsonParse } from './lib/utils';
 import { useAuth } from './providers/FirebaseProvider';
 import { firebaseService } from './services/firebaseService';
 import { seedFirebaseDefaults } from './lib/seedFirebase';
+import { DEFAULT_NEXUS_CONFIG } from './constants';
 
 // Components
 import AuditView from './components/AuditView';
@@ -689,7 +690,7 @@ export default function App() {
 
   // Matrix Filter Logic
   const configRaw = settings?.['nexus_matrix_config'];
-  const matrixConfig = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, null) : configRaw) : null;
+  const matrixConfig = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) : DEFAULT_NEXUS_CONFIG;
   let userPlanId = subscription?.plan_id || 'none';
   if (userPlanId === 'trial') userPlanId = 'test';
   
@@ -699,11 +700,17 @@ export default function App() {
     
     // Find matching pack in matrix
     const pack = matrixConfig.packs?.[userPlanId];
-    if (!pack) return group; // Plan trial/none might show default fallback or nothing
+    if (!pack) return group;
 
     return {
       ...group,
-      items: group.items.filter(item => pack.activeFeatures.includes(item.id))
+      items: group.items.filter(item => {
+        // Essential core tools are always visible for UX consistency 
+        if (['dashboard', 'products', 'categories', 'settings'].includes(item.id)) return true;
+        
+        // Filter others based on the matrix activeFeatures
+        return pack.activeFeatures?.includes(item.id);
+      })
     };
   }).filter(group => group.items.length > 0);
 

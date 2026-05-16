@@ -20,32 +20,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
 import { cn } from '../lib/utils';
-
-export const DEFAULT_NEXUS_CONFIG = {
-  features: [
-    { id: "dashboard", label: "Tableau de Bord", category: "Aperçu" },
-    { id: "social", label: "Nexus Social", category: "Marketing & Ventes" },
-    { id: "smart-feed", label: "Flux Smart Shopping", category: "Marketing & Ventes" },
-    { id: "market", label: "Intelligence Marché", category: "Marketing & Ventes" },
-    { id: "stock", label: "Analyse Stocks", category: "Stocks & Logistique" },
-    { id: "forecast", label: "Nexus Forecast", category: "Stocks & Logistique" },
-    { id: "audit", label: "Audit SEO", category: "SEO & Contenu" },
-    { id: "content", label: "Machine à Contenu", category: "SEO & Contenu" },
-    { id: "autopilot", label: "Auto-Pilote", category: "SEO & Contenu" },
-    { id: "internal-links", label: "Maillage Interne", category: "SEO & Contenu" },
-    { id: "comm-hub", label: "Communication Hub", category: "SEO & Contenu" },
-    { id: "products", label: "Manager Produits", category: "Catalogue & Admin" },
-    { id: "categories", label: "Catégories & Tags", category: "Catalogue & Admin" },
-    { id: "maintenance", label: "Maintenance", category: "Catalogue & Admin" },
-    { id: "settings", label: "Paramètres", category: "Catalogue & Admin" }
-  ],
-  packs: {
-    test: { name: "TEST VISION", price: "0$", duration: "1440 MIN", activeFeatures: ["dashboard", "social", "smart-feed", "market", "stock", "forecast", "audit", "content", "autopilot", "internal-links", "comm-hub", "products", "categories", "maintenance", "settings"] },
-    starter: { name: "STARTER PROTOCOL", price: "29$", duration: "mois", activeFeatures: ["dashboard", "audit", "products", "categories", "maintenance", "settings"] },
-    pro: { name: "PRO NEXUS", price: "89$", duration: "mois", activeFeatures: ["dashboard", "audit", "products", "categories", "maintenance", "settings", "social", "smart-feed", "content", "internal-links", "comm-hub"] },
-    elite: { name: "ELITE VISION", price: "249$", duration: "mois", activeFeatures: ["dashboard", "audit", "products", "categories", "maintenance", "settings", "social", "smart-feed", "content", "internal-links", "comm-hub", "market", "stock", "forecast", "autopilot"] }
-  }
-};
+import { DEFAULT_NEXUS_CONFIG } from '../constants';
 
 export default function MatrixController() {
   const [config, setConfig] = useState(DEFAULT_NEXUS_CONFIG);
@@ -60,8 +35,14 @@ export default function MatrixController() {
     try {
       const settings = await firebaseService.getSettings();
       if (settings['nexus_matrix_config']) {
-        const saved = JSON.parse(settings['nexus_matrix_config']);
-        setConfig(saved);
+        const saved = typeof settings['nexus_matrix_config'] === 'string' 
+          ? JSON.parse(settings['nexus_matrix_config']) 
+          : settings['nexus_matrix_config'];
+        
+        // Error proofing: ensure we merge saved with defaults if structure changed
+        if (saved && saved.categories) {
+           setConfig(saved);
+        }
       }
     } catch (err) {
       console.error('Error loading config:', err);
@@ -100,8 +81,6 @@ export default function MatrixController() {
     updatedPacks[packId as keyof typeof updatedPacks].price = newPrice;
     setConfig({ ...config, packs: updatedPacks });
   };
-
-  const categories = Array.from(new Set(config.features.map(f => f.category)));
 
   return (
     <div className="bg-[#0c0e14] border border-slate-800 rounded-[2.5rem] p-10 relative overflow-hidden group">
@@ -170,12 +149,12 @@ export default function MatrixController() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {categories.map((cat) => (
-              <React.Fragment key={cat}>
+            {config.categories.map((category) => (
+              <React.Fragment key={category.id}>
                 <tr className="bg-white/[0.02]">
-                  <td colSpan={5} className="px-8 py-3 text-[8px] font-black text-purple-400 uppercase tracking-[0.4em]">{cat}</td>
+                  <td colSpan={5} className="px-8 py-3 text-[8px] font-black text-purple-400 uppercase tracking-[0.4em]">{category.label}</td>
                 </tr>
-                {config.features.filter(f => f.category === cat).map((feature) => (
+                {category.features.map((feature) => (
                   <tr key={feature.id} className="group hover:bg-white/[0.02] transition-colors">
                     <td className="p-8">
                        <div className="flex flex-col">

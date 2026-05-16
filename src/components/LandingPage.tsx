@@ -25,6 +25,7 @@ import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
 import { firebaseService } from '../services/firebaseService';
 import ComparisonTable from './ComparisonTable';
+import { DEFAULT_NEXUS_CONFIG } from '../constants';
 
 const FALLBACK_PLANS = [
   { id: 'trial', name: 'Test Vision', price: 0, site_limit: 1, description: 'Testez toutes les fonctionnalités pendant 60 minutes' },
@@ -47,7 +48,7 @@ export default function LandingPage({
   settings?: any
 }) {
   const [plans, setPlans] = useState<any[]>(FALLBACK_PLANS);
-  const [matrixConfig, setMatrixConfig] = useState<any>(null);
+  const [matrixConfig, setMatrixConfig] = useState<any>(DEFAULT_NEXUS_CONFIG);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [activeFeature, setActiveFeature] = useState(0);
   const [currentView, setCurrentView] = useState<'home' | 'privacy' | 'terms'>('home');
@@ -66,7 +67,13 @@ export default function LandingPage({
           : await firebaseService.getSettings();
 
         const configRaw = settingsSource?.['nexus_matrix_config'];
-        const matrixData = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, null) : configRaw) : null;
+        let matrixData = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) : DEFAULT_NEXUS_CONFIG;
+        
+        // Validation: if categories or packs are missing, use defaults
+        if (!matrixData?.categories || !matrixData?.packs) {
+          matrixData = DEFAULT_NEXUS_CONFIG;
+        }
+
         setMatrixConfig(matrixData);
 
         const getFeaturesForPack = (packId: string, defaultFeatures: string[]) => {
@@ -75,8 +82,17 @@ export default function LandingPage({
           if (!Array.isArray(activeIds) || activeIds.length === 0) return defaultFeatures;
           
           const mapped = activeIds.map((id: string) => {
-            const feat = matrixData.features?.find((f: any) => f.id === id);
-            return feat?.label || id;
+            // New categorized lookup
+            let label = id;
+            matrixData.categories?.some((cat: any) => {
+              const feat = cat.features?.find((f: any) => f.id === id);
+              if (feat) {
+                label = feat.label;
+                return true;
+              }
+              return false;
+            });
+            return label;
           }).filter(Boolean);
 
           return mapped.length > 0 ? mapped : defaultFeatures;
@@ -608,12 +624,22 @@ export default function LandingPage({
               </div>
             )}
           </div>
+        </div>
+      </section>
 
-          {matrixConfig && (
-            <div className="mt-20">
-               <ComparisonTable config={matrixConfig} />
-            </div>
-          )}
+      {/* Comparison Table Section */}
+      <section id="comparison" className="py-24 bg-[#0a0a0f] border-t border-white/5">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-display font-black text-white italic uppercase tracking-tighter mb-4">
+              NEXUS <span className="text-indigo-500">MATRIX</span> ARCHITECTURE
+            </h2>
+            <div className="w-20 h-1 bg-indigo-500 mx-auto rounded-full mb-6" />
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em]">
+              Protocoles de privilèges et déploiement IA
+            </p>
+          </div>
+          <ComparisonTable config={matrixConfig || DEFAULT_NEXUS_CONFIG} />
         </div>
       </section>
 
