@@ -38,6 +38,7 @@ import {
   RotateCw,
   ChevronLeft,
   Lock,
+  Mail,
   Link as LinkIcon,
   Database,
   BarChart3
@@ -69,6 +70,7 @@ import SmartFeedView from './components/SmartFeedView';
 import SettingsView from './components/SettingsView';
 import PricingView from './components/PricingView';
 import AffiliateView from './components/AffiliateView';
+import CommunicationHubView from './components/CommunicationHubView';
 import SitesView from './components/SitesView';
 import SuperAdminView from './components/SuperAdminView';
 import LandingPage from './components/LandingPage';
@@ -637,6 +639,7 @@ export default function App() {
   const adminTabs = [
     ...(isSuperAdmin ? [{ id: 'super', label: t('nav.superAdmin'), icon: Shield }] : []),
     { id: 'sites', label: t('nav.sites'), icon: Monitor },
+    { id: 'comm-hub', label: 'Communication Hub', icon: Mail },
     { id: 'pricing', label: 'Nexus Plans (Boutique)', icon: Zap },
     { id: 'affiliates', label: t('nav.affiliate'), icon: Users },
   ];
@@ -670,6 +673,7 @@ export default function App() {
         { id: 'content', label: t('nav.content'), icon: FileText },
         { id: 'autopilot', label: t('nav.autopilot'), icon: RotateCw },
         { id: 'internal-links', label: 'Maillage Interne', icon: LinkIcon },
+        { id: 'comm-hub', label: 'Communication Hub', icon: Mail },
       ]
     },
     {
@@ -870,6 +874,7 @@ export default function App() {
             >
               {activeTab === 'dashboard' && config && <DashboardView config={config} setActiveTab={setActiveTab} userEmail={userEmail} />}
               {activeTab === 'affiliates' && userEmail && <AffiliateView userEmail={userEmail} />}
+              {activeTab === 'comm-hub' && <CommunicationHubView />}
               {activeTab === 'forecast' && config && <ForecastView config={config} />}
               {(activeTab === 'dashboard' || activeTab === 'forecast' || activeTab === 'stock' || activeTab === 'audit' || activeTab === 'content' || activeTab === 'products' || activeTab === 'categories' || activeTab === 'market' || activeTab === 'internal-links' || activeTab === 'maintenance' || activeTab === 'settings' || activeTab === 'smart-feed') && !config && (
                 <div className="h-[80vh] flex flex-col items-center justify-center text-center">

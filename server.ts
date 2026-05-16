@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import cors from 'cors';
 import axios from 'axios';
+import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -562,6 +563,137 @@ async function startServer() {
     } catch (error: any) {
       console.error(`[GEMINI-PROXY-ERROR]:`, error.message);
       res.status(error.response?.status || 500).json({ error: error.message });
+    }
+  });
+
+  // --- COMMUNICATION HUB HELPERS ---
+  async function getTransporter(userEmail: string) {
+    // Check if we are super admin (ziedbenmiled3@gmail.com)
+    const isAdminRequest = userEmail.toLowerCase() === 'ziedbenmiled3@gmail.com';
+    
+    if (isAdminRequest) {
+      // Return master SMTP settings from environment or DB
+      return nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: Number(process.env.SMTP_PORT) || 587,
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        }
+      });
+    }
+
+    // Get user SMTP settings from DB
+    const settings = db.prepare('SELECT * FROM smtp_settings WHERE user_email = ?').get(userEmail) as any;
+    if (!settings) throw new Error('SMTP settings not found for this user. Please configure them in Communication Hub > Settings.');
+
+    return nodemailer.createTransport({
+      host: settings.host,
+      port: settings.port,
+      secure: settings.secure === 1,
+      auth: {
+        user: settings.auth_user,
+        pass: settings.auth_pass
+      }
+    });
+  }
+
+  // --- COMMUNICATION HUB ENDPOINTS ---
+
+  app.get('/api/comm/settings', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const settings = db.prepare('SELECT * FROM smtp_settings WHERE user_email = ?').get(email);
+    res.json(settings || {});
+  });
+
+  app.post('/api/comm/settings', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const { host, port, secure, auth_user, auth_pass, from_name, from_email } = req.body;
+    
+    db.prepare(`
+      INSERT OR REPLACE INTO smtp_settings (user_email, host, port, secure, auth_user, auth_pass, from_name, from_email)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(email, host, port, secure ? 1 : 0, auth_user, auth_pass, from_name, from_email);
+    
+    res.json({ success: true });
+  });
+
+  app.post('/api/comm/test-connection', async (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    
+    try {
+      const transporter = await getTransporter(email);
+      await transporter.verify();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/comm/templates', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const templates = db.prepare("SELECT * FROM email_templates WHERE user_email = ? OR user_email = 'admin'").all(email);
+    res.json(templates);
+  });
+
+  app.post('/api/comm/templates', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const { name, subject, body_html, category, is_ai_generated } = req.body;
+    
+    db.prepare(`
+      INSERT INTO email_templates (user_email, name, subject, body_html, category, is_ai_generated)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(email, name, subject, body_html, category || 'general', is_ai_generated ? 1 : 0);
+    
+    res.json({ success: true });
+  });
+
+  app.get('/api/comm/analytics', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const stats = db.prepare(`
+      SELECT 
+        COUNT(*) as sent,
+        SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) as opened,
+        date(created_at) as day
+      FROM email_logs 
+      WHERE user_email = ?
+      GROUP BY day
+      ORDER BY day ASC
+      LIMIT 7
+    `).all(email);
+    res.json(stats);
+  });
+
+  app.post('/api/comm/send', async (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const { recipient, subject, body_html, template_id } = req.body;
+
+    try {
+      const transporter = await getTransporter(email);
+      const settings = (email.toLowerCase() === 'ziedbenmiled3@gmail.com') 
+        ? { from_name: 'Nexus AI', from_email: process.env.SMTP_USER }
+        : db.prepare('SELECT from_name, from_email FROM smtp_settings WHERE user_email = ?').get(email) as any;
+
+      await transporter.sendMail({
+        from: `"${settings.from_name}" <${settings.from_email}>`,
+        to: recipient,
+        subject: subject,
+        html: body_html
+      });
+
+      db.prepare('INSERT INTO email_logs (user_email, recipient, subject, status) VALUES (?, ?, ?, ?)').run(email, recipient, subject, 'sent');
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[SEND-EMAIL-ERROR]:', err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 

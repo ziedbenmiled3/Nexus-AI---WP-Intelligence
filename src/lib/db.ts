@@ -45,6 +45,50 @@ db.exec(`
     percentage INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS smtp_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_email TEXT NOT NULL UNIQUE,
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    secure INTEGER DEFAULT 1,
+    auth_user TEXT NOT NULL,
+    auth_pass TEXT NOT NULL,
+    from_name TEXT,
+    from_email TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS email_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_email TEXT NOT NULL, -- 'admin' for system templates
+    name TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body_html TEXT NOT NULL,
+    category TEXT DEFAULT 'general', -- 'saas' or 'woo'
+    is_ai_generated INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS email_automations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_email TEXT NOT NULL,
+    event_trigger TEXT NOT NULL, -- e.g., 'order_completed', 'payment_success'
+    template_id INTEGER,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(template_id) REFERENCES email_templates(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS email_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_email TEXT NOT NULL, -- site owner
+    recipient TEXT NOT NULL,
+    subject TEXT,
+    status TEXT DEFAULT 'sent', -- 'sent', 'delivered', 'opened', 'failed'
+    opened_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
