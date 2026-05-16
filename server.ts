@@ -7,7 +7,9 @@ import axios from 'axios';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
+const __filename = (typeof import.meta !== 'undefined' && import.meta.url) 
+  ? fileURLToPath(import.meta.url) 
+  : path.join(process.cwd(), 'server.ts');
 const __dirname = path.dirname(__filename);
 
 import db from './src/lib/db.js';
