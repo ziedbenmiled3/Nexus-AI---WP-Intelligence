@@ -14,9 +14,8 @@ import {
   Play,
   Share2
 } from 'lucide-react';
-import { improveImagePrompt, generatePromoVideoScript } from '../lib/gemini';
+import { improveImagePrompt, generatePromoVideoScript, geminiQuery } from '../lib/gemini';
 import { motion, AnimatePresence } from 'motion/react';
-import api from '../lib/api';
 
 export default function MediaView({ config }: { config: WPConfig }) {
   const [activeMode, setActiveMode] = useState<'image' | 'video'>('image');
@@ -33,16 +32,21 @@ export default function MediaView({ config }: { config: WPConfig }) {
     setIsProcessing(true);
     setStatus('Le Maestro concocte un prompt parfait...');
     try {
-      const promptText = await improveImagePrompt(productDetails);
+      const promptText = await improveImagePrompt(productDetails, config.geminiApiKey);
       setStatus('Génération du packshot studio (AI Proxy)...');
       
-      const res = await api.post('/api/gemini', {
-        model: 'gemini-flash-latest',
+      const res = await geminiQuery({
+        model: 'gemini-3-flash-preview',
         prompt: `Studio packshot, ${promptText}, ultra high quality, commercial photography, minimalist background`,
-      });
+      }, config.geminiApiKey);
 
-      if (res.data.inlineData) {
-        setGeneratedImg(`data:image/png;base64,${res.data.inlineData.data}`);
+      if (res.data.response?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)) {
+        const part = res.data.response.candidates[0].content.parts.find((p: any) => p.inlineData);
+        setGeneratedImg(`data:image/png;base64,${part.inlineData.data}`);
+      } else {
+        // Fallback or message
+        setStatus('Prompt optimisé terminé. (Génération d\'image non supportée en direct)');
+        console.log('Improved Prompt:', res.data.text);
       }
       
       setStatus('Génération terminée');
@@ -61,7 +65,7 @@ export default function MediaView({ config }: { config: WPConfig }) {
     try {
       // For now, Video generation is limited in standard Gemini API vs experimental ones
       // We will simulate the script generation and show a placeholder message for actual video synthesis
-      await generatePromoVideoScript(productDetails, "Product video");
+      await generatePromoVideoScript(productDetails, "Product video", config.geminiApiKey);
       setStatus('Génération de la vidéo promotionnelle (Simulation)...');
       
       // Since 'veo' models might not be available in standard API keys or regions, 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, X, Send, Zap, User, Cpu, Loader2 } from 'lucide-react';
-import { sendMessage } from '../services/geminiService';
+import { geminiQuery } from '../lib/gemini';
 import { cn } from '../lib/utils';
 
 interface Message {
@@ -39,8 +39,13 @@ export default function AIChatSupport() {
         parts: [{ text: m.text }]
       }));
       
-      const response = await sendMessage(userMsg, history);
-      setMessages(prev => [...prev, { role: 'model', text: response || "Je n'ai pas pu générer de réponse." }]);
+      const res = await geminiQuery({
+        model: "gemini-3-flash-preview",
+        contents: [...history, { role: 'user', parts: [{ text: userMsg }] }],
+        systemInstruction: "Tu es l'assistant d'élite de WP_AGENT.AI, un protocole d'IA révolutionnaire pour WooCommerce."
+      });
+      
+      setMessages(prev => [...prev, { role: 'model', text: res.data.text || "Je n'ai pas pu générer de réponse." }]);
     } catch (error) {
       setMessages(prev => [...prev, { role: 'model', text: "Erreur de connexion avec le protocole Nexus. Veuillez réessayer." }]);
     } finally {

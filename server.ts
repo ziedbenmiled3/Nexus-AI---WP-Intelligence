@@ -6,10 +6,11 @@ import cors from 'cors';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI } from "@google/genai";
 
-const __filename = (typeof import.meta !== 'undefined' && import.meta.url) 
+const __filename = (typeof import.meta !== 'undefined' && typeof import.meta.url === 'string' && import.meta.url.length > 0) 
   ? fileURLToPath(import.meta.url) 
-  : path.join(process.cwd(), 'server.ts');
+  : path.resolve(process.cwd(), 'server.ts');
 const __dirname = path.dirname(__filename);
 
 import db from './src/lib/db.js';
@@ -282,23 +283,129 @@ async function startServer() {
     });
   });
 
+  // Admin: WordPress Sites Listing (Admin view)
+  app.get('/api/admin/sites', (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Accès refusé' });
+    res.json(db.prepare('SELECT * FROM sites').all());
+  });
+
   // Diagnostic Endpoint for Gemini
   app.get('/api/gemini-debug', (req, res) => {
-    const apiKey = (process.env.GEMINI_API_KEY || process.env.USER_GEMINI_API_KEY || '').trim();
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
     res.json({
        env_key_present: !!process.env.GEMINI_API_KEY,
-       user_key_present: !!process.env.USER_GEMINI_API_KEY,
        active_key_prefix: apiKey ? `${apiKey.substring(0, 10)}...` : 'NONE',
        is_hardcoded_admin: (req.headers['x-user-email'] === 'ziedbenmiled3@gmail.com'),
        node_env: process.env.NODE_ENV
     });
   });
 
-  // PayPal Webhook
-  app.post('/api/webhooks/paypal', (req, res) => {
-    const event = req.body;
-    console.log('PayPal Webhook Received:', event.event_type);
-    res.status(200).send('OK');
+  // Gemini AI Proxy Endpoint
+  app.post('/api/gemini', async (req, res) => {
+    try {
+      const { prompt, context, systemInstruction, responseMimeType, responseSchema, model: modelName, contents, generationConfig: incomingConfig } = req.body;
+      const userEmail = (req.headers['x-user-email'] as string)?.toLowerCase();
+      
+      let apiKey = ((req.headers['x-gemini-key'] as string) || (req.body.userApiKey as string) || '').trim();
+      
+      // Use env key first
+      if (!apiKey) {
+        apiKey = (process.env.GEMINI_API_KEY || '').trim();
+      }
+
+      // Check DB for Master Key if still missing
+      if (!apiKey) {
+        const dbMasterKey = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_master_key') as any;
+        if (dbMasterKey?.value) apiKey = dbMasterKey.value;
+      }
+
+      const hardcodedPaidKey = 'AIzaSyAKqtiN4WTda5zjahqzMq30yTHl6MFJHYk'; 
+
+      // Only use hardcoded key as last resort for the admin
+      if (!apiKey && userEmail === 'ziedbenmiled3@gmail.com') {
+        apiKey = hardcodedPaidKey;
+      }
+
+      if (!apiKey) {
+        return res.status(403).json({ 
+          error: 'Clé API Gemini manquante.', 
+          suggestion: 'Veuillez insérer votre propre Clé API Gemini dans les paramètres.' 
+        });
+      }
+
+      const modelToUse = modelName || "gemini-3-flash-preview";
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+      
+      const fullPrompt = context ? `Contexte: ${context}\n\nQuestion/Tâche: ${prompt}` : prompt || "";
+      
+      const payload: any = {
+        model: modelToUse,
+        contents: contents || [{ role: 'user', parts: [{ text: fullPrompt }] }],
+        config: {
+          temperature: incomingConfig?.temperature ?? 0.7,
+          topP: incomingConfig?.topP ?? 0.95,
+          maxOutputTokens: incomingConfig?.maxOutputTokens ?? 4096,
+          responseMimeType: responseMimeType || undefined,
+          responseSchema: responseSchema || undefined,
+          systemInstruction: systemInstruction || undefined,
+        }
+      };
+
+      const response = await ai.models.generateContent(payload);
+      
+      res.json({ 
+        text: response.text,
+        candidates: response.candidates 
+      });
+    } catch (error: any) {
+      console.error(`[GEMINI-PROXY-ERROR]:`, error.message);
+      res.status(error.status || 500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Gemini Master Key Endpoints
+  app.get('/api/admin/master-key', (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Accès refusé' });
+    const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_master_key') as any;
+    res.json({ key: setting ? setting.value : '' });
+  });
+
+  app.post('/api/admin/master-key', (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Accès refusé' });
+    const { value } = req.body;
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('gemini_master_key', value);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/test-key', async (req, res) => {
+    const { key } = req.body;
+    if (!key) return res.status(400).json({ error: 'Clé manquante' });
+    
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: key,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "Hello",
+      });
+      res.json({ success: true, detail: response.text });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // WordPress Proxy Endpoint
@@ -364,217 +471,80 @@ async function startServer() {
     }
   });
 
-  // Admin: Gemini Master Key Endpoints
-  app.get('/api/admin/master-key', (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Accès refusé' });
-    const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_master_key') as any;
-    res.json({ key: setting ? setting.value : '' });
+  // Communication Hub: Automation Rules
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS communication_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_email TEXT,
+      name TEXT,
+      description TEXT,
+      trigger_key TEXT,
+      scope TEXT,
+      is_active INTEGER DEFAULT 1,
+      template_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  app.get('/api/comm/rules', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    res.json(db.prepare('SELECT * FROM communication_rules WHERE user_email = ? ORDER BY created_at DESC').all(email));
   });
 
-  app.post('/api/admin/master-key', (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Accès refusé' });
-    const { value } = req.body;
-    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('gemini_master_key', value);
+  app.post('/api/comm/rules', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const { name, description, trigger_key, scope, template_id } = req.body;
+    
+    db.prepare(`
+      INSERT INTO communication_rules (user_email, name, description, trigger_key, scope, template_id, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `).run(email, name, description, trigger_key, scope, template_id);
+    
     res.json({ success: true });
   });
 
-  app.post('/api/admin/test-key', async (req, res) => {
-    const { key } = req.body;
-    if (!key) return res.status(400).json({ error: 'Clé manquante' });
+  app.patch('/api/comm/rules/:id/toggle', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    const { id } = req.params;
+    const { is_active } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
     
-    try {
-      const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-      const models = response.data.models || [];
-      res.json({ success: true, models_count: models.length, models: models.map((m: any) => m.name.replace('models/', '')) });
-    } catch (err: any) {
-      res.status(500).json({ error: err.response?.data?.error?.message || err.message });
-    }
+    db.prepare("UPDATE communication_rules SET is_active = ? WHERE id = ? AND user_email = ?")
+      .run(is_active ? 1 : 0, id, email);
+    
+    res.json({ success: true });
   });
 
-  // Gemini AI Proxy Endpoint (Updated to use DB master key)
-  app.post('/api/gemini', async (req, res) => {
-    try {
-      const { prompt, context, systemInstruction, responseMimeType, responseSchema, model: modelName, contents, generationConfig: incomingConfig } = req.body;
-      const userEmail = (req.headers['x-user-email'] as string)?.toLowerCase();
-      
-      let apiKey = ((req.headers['x-gemini-key'] as string) || (req.body.userApiKey as string) || '').trim();
-      
-      // Use env key first
-      if (!apiKey) {
-        apiKey = (process.env.GEMINI_API_KEY || process.env.USER_GEMINI_API_KEY || '').trim();
-      }
-
-      // Check DB for Master Key if still missing
-      if (!apiKey) {
-        const dbMasterKey = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_master_key') as any;
-        if (dbMasterKey?.value) apiKey = dbMasterKey.value;
-      }
-
-      const hardcodedPaidKey = 'AIzaSyAKqtiN4WTda5zjahqzMq30yTHl6MFJHYk';
-
-      // Only use hardcoded key as last resort for the admin
-      if (!apiKey && userEmail === 'ziedbenmiled3@gmail.com') {
-        apiKey = hardcodedPaidKey;
-      }
-
-      if (!apiKey) {
-        return res.status(403).json({ 
-          error: 'Clé API Gemini manquante.', 
-          suggestion: 'Veuillez insérer votre propre Clé API Gemini dans les paramètres.' 
-        });
-      }
-
-      const primaryModels = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-001",
-      ];
-
-      const finalStack: string[] = [];
-      const addModelToStack = (m: string) => {
-        const base = m.replace('models/', '');
-        const canonical = base.includes('/') ? base : `models/${base}`;
-        if (!finalStack.includes(canonical)) finalStack.push(canonical);
-      };
-
-      if (typeof modelName === 'string' && modelName) {
-        addModelToStack(modelName);
-      }
-      primaryModels.forEach(addModelToStack);
-
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
-
-      let lastResult;
-      let lastError;
-      let success = false;
-      let currentApiKey = apiKey;
-
-      for (const modelToTry of finalStack) {
-        if (success) break;
-        
-        const fullPrompt = context ? `Contexte: ${context}\n\nQuestion/Tâche: ${prompt}` : prompt || "Hello";
-        const generationConfig: any = {
-          temperature: incomingConfig?.temperature ?? 0.7,
-          topP: incomingConfig?.topP ?? 0.95,
-          maxOutputTokens: incomingConfig?.maxOutputTokens ?? 4096,
-        };
-
-        if (responseMimeType) generationConfig.responseMimeType = responseMimeType;
-        if (responseSchema) generationConfig.responseSchema = responseSchema;
-
-        const payload = {
-          contents: contents || [{ role: 'user', parts: [{ text: fullPrompt }] }],
-          generationConfig
-        };
-
-        let retryCount = 0;
-        const maxRetries = 1;
-
-        while (retryCount <= maxRetries && !success) {
-          try {
-            console.log(`[GEMINI-PROXY] Trying ${modelToTry} via SDK...`);
-            const genAI = new GoogleGenerativeAI(currentApiKey);
-            const modelRequest = { 
-              model: modelToTry,
-              systemInstruction: systemInstruction || undefined
-            };
-            const selectedModel = genAI.getGenerativeModel(modelRequest, { timeout: 180000 });
-            lastResult = await selectedModel.generateContent(payload);
-            console.log(`[GEMINI-PROXY] Success with ${modelToTry}`);
-            success = true;
-            break;
-          } catch (err: any) {
-            lastError = err;
-            const errMsg = (err.message || '').toLowerCase();
-            console.warn(`[GEMINI-PROXY] SDK ${modelToTry} failed:`, err.message);
-
-            const isAuth = errMsg.includes('403') || errMsg.includes('401') || errMsg.includes('key not valid') || errMsg.includes('unauthorized') || errMsg.includes('expired');
-            const is404 = errMsg.includes('404') || errMsg.includes('not found') || errMsg.includes('no longer available');
-
-            if ((isAuth || is404) && currentApiKey === hardcodedPaidKey) {
-               const envKey = (process.env.GEMINI_API_KEY || process.env.USER_GEMINI_API_KEY || '').trim();
-               if (envKey && envKey !== currentApiKey) {
-                  console.log(`[GEMINI-PROXY] Falling back to default environment key...`);
-                  currentApiKey = envKey;
-                  retryCount++;
-                  continue; 
-               }
-            }
-
-            // Fallback to REST if SDK fails
-            try {
-              const modelBase = modelToTry.replace('models/', '');
-              const versions = ['v1beta', 'v1'];
-              const paths = [`models/${modelBase}`, modelBase];
-
-              for (const ver of versions) {
-                if (success) break;
-                for (const pathUsed of paths) {
-                  if (success) break;
-                  
-                  try {
-                    console.log(`[GEMINI-PROXY] Trying REST ${ver} / ${pathUsed}`);
-                    const restPayload: any = {
-                      contents: payload.contents,
-                      generationConfig: {
-                        max_output_tokens: generationConfig.maxOutputTokens,
-                        temperature: generationConfig.temperature,
-                        top_p: generationConfig.topP,
-                      }
-                    };
-                    if (systemInstruction && ver === 'v1beta') restPayload.systemInstruction = { parts: [{ text: systemInstruction }] };
-                    if (responseMimeType && ver === 'v1beta') restPayload.generationConfig.response_mime_type = responseMimeType;
-                    
-                    const responseDirect = await axios.post(
-                      `https://generativelanguage.googleapis.com/${ver}/${pathUsed}:generateContent`,
-                      restPayload,
-                      { 
-                        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': currentApiKey },
-                        timeout: 60000,
-                        validateStatus: (s) => s === 200
-                      }
-                    );
-
-                    if (responseDirect.data?.candidates?.[0]) {
-                      const text = responseDirect.data.candidates[0].content?.parts?.[0]?.text || "";
-                      lastResult = { response: { text: () => text, candidates: responseDirect.data.candidates } };
-                      console.log(`[GEMINI-PROXY] REST Success: ${pathUsed} (${ver})`);
-                      success = true;
-                    }
-                  } catch (e: any) {
-                    console.warn(`[GEMINI-PROXY] REST ${ver}/${pathUsed} failed:`, e.message);
-                  }
-                }
-              }
-            } catch (restErr) {}
-
-            if (success) break;
-            retryCount++;
-          }
-        }
-      }
-
-      if (!success || !lastResult) {
-        throw new Error(lastError?.message || "All models failed.");
-      }
-
-      const response = await lastResult.response;
-      res.json({ text: response.text() });
-    } catch (error: any) {
-      console.error(`[GEMINI-PROXY-ERROR]:`, error.message);
-      res.status(error.response?.status || 500).json({ error: error.message });
-    }
+  app.delete('/api/comm/rules/:id', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    const { id } = req.params;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    
+    db.prepare("DELETE FROM communication_rules WHERE id = ? AND user_email = ?").run(id, email);
+    res.json({ success: true });
   });
 
   // --- COMMUNICATION HUB HELPERS ---
   async function getTransporter(userEmail: string) {
-    // Check if we are super admin (ziedbenmiled3@gmail.com)
-    const isAdminRequest = userEmail.toLowerCase() === 'ziedbenmiled3@gmail.com';
+    // Get user SMTP settings from DB
+    const settings = db.prepare('SELECT * FROM smtp_settings WHERE user_email = ?').get(userEmail) as any;
     
-    if (isAdminRequest) {
-      // Return master SMTP settings from environment or DB
+    if (settings) {
+      return nodemailer.createTransport({
+        host: settings.host,
+        port: settings.port,
+        secure: settings.secure === 1,
+        auth: {
+          user: settings.auth_user,
+          pass: settings.auth_pass
+        }
+      });
+    }
+
+    // Fallback for admin
+    if (userEmail.toLowerCase() === 'ziedbenmiled3@gmail.com') {
       return nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: Number(process.env.SMTP_PORT) || 587,
@@ -586,19 +556,7 @@ async function startServer() {
       });
     }
 
-    // Get user SMTP settings from DB
-    const settings = db.prepare('SELECT * FROM smtp_settings WHERE user_email = ?').get(userEmail) as any;
-    if (!settings) throw new Error('SMTP settings not found for this user. Please configure them in Communication Hub > Settings.');
-
-    return nodemailer.createTransport({
-      host: settings.host,
-      port: settings.port,
-      secure: settings.secure === 1,
-      auth: {
-        user: settings.auth_user,
-        pass: settings.auth_pass
-      }
-    });
+    throw new Error('Paramètres SMTP non trouvés. Veuillez les configurer dans l’onglet Configuration SMTP.');
   }
 
   // --- COMMUNICATION HUB ENDPOINTS ---
@@ -653,6 +611,30 @@ async function startServer() {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(email, name, subject, body_html, category || 'general', is_ai_generated ? 1 : 0);
     
+    res.json({ success: true });
+  });
+
+  app.put('/api/comm/templates/:id', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    const { id } = req.params;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    const { name, subject, body_html, category, is_ai_generated } = req.body;
+    
+    db.prepare(`
+      UPDATE email_templates 
+      SET name = ?, subject = ?, body_html = ?, category = ?, is_ai_generated = ?
+      WHERE id = ? AND user_email = ?
+    `).run(name, subject, body_html, category || 'general', is_ai_generated ? 1 : 0, id, email);
+    
+    res.json({ success: true });
+  });
+
+  app.delete('/api/comm/templates/:id', (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    const { id } = req.params;
+    if (!email) return res.status(400).json({ error: 'Email missing' });
+    
+    db.prepare("DELETE FROM email_templates WHERE id = ? AND user_email = ?").run(id, email);
     res.json({ success: true });
   });
 

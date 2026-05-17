@@ -26,7 +26,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { WPConfig } from '../types';
 import { wpFetch } from '../lib/wordpress';
-import api from '../lib/api';
+import { geminiQuery } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
@@ -226,11 +226,11 @@ ${JSON.stringify(stockSummary.slice(0, 40), null, 2)}
 
 Réponds en français, avec un ton professionnel, analytique et encourageant. Utilise un format Markdown élégant avec des titres et des listes.`;
 
-      const res = await api.post('/api/gemini', {
-        model: "gemini-flash-latest",
+      const res = await geminiQuery({
+        model: "gemini-3-flash-preview",
         prompt,
         systemInstruction: "Tu es un expert en gestion de stocks et logistique e-commerce."
-      });
+      }, config.geminiApiKey);
 
       setAiAdvice(res.data.text || "Désolé, je n'ai pas pu générer de conseils pour le moment.");
     } catch (err: any) {

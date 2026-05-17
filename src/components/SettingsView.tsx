@@ -18,6 +18,7 @@ import { cn } from '../lib/utils';
 import { firebaseService } from '../services/firebaseService';
 import { useAuth } from '../providers/FirebaseProvider';
 import api from '../lib/api';
+import { testGeminiConnection } from '../lib/gemini';
 
 // Comprehensive list of world currencies
 const WORLD_CURRENCIES = [
@@ -190,15 +191,19 @@ export default function SettingsView({ config }: { config: WPConfig }) {
     setTestingAPI(true);
     setTestResult(null);
     try {
-      const response = await api.get('/api/gemini-debug');
-      setTestResult(response.data);
+      const res = await testGeminiConnection(config.geminiApiKey || '');
+      setTestResult({
+        status: 'success',
+        message: 'Connexion à l\'API Gemini établie avec succès.',
+        detail: `Réponse: ${res.data.text}`
+      } as any);
     } catch (error: any) {
       console.error('Gemini test failed:', error);
       setTestResult({
         status: 'error',
         message: 'Erreur lors du test de l\'API',
-        detail: error.response?.data?.detail || error.message
-      });
+        detail: error.message
+      } as any);
     } finally {
       setTestingAPI(false);
     }

@@ -41,7 +41,7 @@ import {
 import { WPConfig } from '../types';
 import { wpFetch } from '../lib/wordpress';
 import ReactMarkdown from 'react-markdown';
-import api from '../lib/api';
+import { geminiQuery } from '../lib/gemini';
 
 interface Props {
   config: WPConfig;
@@ -299,11 +299,11 @@ export default function ProductManagerView({ config }: Props) {
         prompt = `Analyse globale de mon catalogue produits. Quels sont les points faibles ? Comment améliorer la conversion sur mes fiches produits ? Monnaie du site: ${currency}. Data: ${JSON.stringify(productData)}`;
       }
 
-      const res = await api.post('/api/gemini', {
-        model: "gemini-flash-latest",
+      const res = await geminiQuery({
+        model: "gemini-3-flash-preview",
         prompt,
         systemInstruction: "Tu es un expert Growth Hacker e-commerce."
-      });
+      }, config.geminiApiKey);
 
       setAiResponse(res.data.text || "Désolé, je sèche...");
     } catch (err: any) {
@@ -345,11 +345,11 @@ export default function ProductManagerView({ config }: Props) {
         Inclus une section finale "RECOMMANDATION NEXUS" très claire.
       `;
 
-      const res = await api.post('/api/gemini', {
-        model: "gemini-flash-latest",
+      const res = await geminiQuery({
+        model: "gemini-3-flash-preview",
         prompt,
         systemInstruction: "Tu es un expert en stratégie de prix e-commerce."
-      });
+      }, config.geminiApiKey);
 
       setSimulationResult(res.data.text || "Erreur de simulation");
     } catch (err: any) {
@@ -849,7 +849,7 @@ export default function ProductManagerView({ config }: Props) {
             <table className="w-full text-left">
                <thead>
                   <tr className="border-b border-slate-800/80 bg-slate-900/10">
-                     <th className="px-8 py-6 w-12">
+                     <th className="px-1 py-6 w-12 text-center">
                         <input 
                            type="checkbox" 
                            checked={selectedIds.length === filteredProducts.length && filteredProducts.length > 0}
@@ -858,11 +858,11 @@ export default function ProductManagerView({ config }: Props) {
                         />
                      </th>
                      <th className="px-6 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em]">Produit</th>
-                     <th className="px-6 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em]">Catégorie</th>
-                     <th className="px-6 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em]">État du Stock</th>
-                     <th className="px-6 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em]">Prix Régulier</th>
-                     <th className="px-6 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em]">En Promo</th>
-                     <th className="px-6 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em] text-right">Action</th>
+                     <th className="px-4 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em] w-px whitespace-nowrap">Catégorie</th>
+                     <th className="px-4 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em] w-px whitespace-nowrap">État du Stock</th>
+                     <th className="px-4 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em] w-px whitespace-nowrap">Prix Régulier</th>
+                     <th className="px-4 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em] w-px whitespace-nowrap">En Promo</th>
+                     <th className="px-8 py-6 text-[11px] font-black text-slate-600 uppercase tracking-[0.3em] text-right">Action</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-800/40">
@@ -887,7 +887,7 @@ export default function ProductManagerView({ config }: Props) {
                   ) : filteredProducts.map((product) => (
                      <React.Fragment key={product.id}>
                         <tr className="hover:bg-slate-800/20 transition-all group">
-                        <td className="px-8 py-5">
+                        <td className="px-1 py-5">
                            <input 
                               type="checkbox" 
                               checked={selectedIds.includes(product.id)}
@@ -896,7 +896,7 @@ export default function ProductManagerView({ config }: Props) {
                            />
                         </td>
                         <td className="px-6 py-5">
-                           <div className="flex items-center gap-4 min-w-[200px]">
+                           <div className="flex items-center gap-4">
                               <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0 group-hover:border-indigo-500/30 transition-colors">
                                  {product.images?.[0]?.src ? (
                                     <img src={product.images[0].src} alt="" className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all" />
@@ -908,18 +908,18 @@ export default function ProductManagerView({ config }: Props) {
                               </div>
                               <div className="min-w-0">
                                  <h4 className="text-sm font-black text-white uppercase tracking-wider truncate mb-1">{product.name}</h4>
-                                 <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">SKU: {product.sku || '---'}</span>
+                                 <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest block truncate">SKU: {product.sku || '---'}</span>
                               </div>
                            </div>
                         </td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 py-5 w-px whitespace-nowrap">
                            <div className="flex flex-wrap gap-1">
                               {product.categories?.slice(0, 2).map((c: any) => (
                                  <span key={c.id} className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded-md text-[10px] font-black text-slate-500 uppercase">{c.name}</span>
                               ))}
                            </div>
                         </td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 py-5 w-px whitespace-nowrap">
                            <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
                               product.stock_status === 'instock' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-500'
                            }`}>
@@ -945,12 +945,12 @@ export default function ProductManagerView({ config }: Props) {
                               )}
                            </div>
                         </td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 py-5 w-px whitespace-nowrap">
                            <span className="text-xs font-black text-white">
-                              {product.price ? `${product.price} ${currency}` : (product.regular_price ? `${product.regular_price} ${currency}` : '---')}
+                              {product.price || product.regular_price || '---'} {currency}
                            </span>
                         </td>
-                        <td className="px-6 py-5">
+                        <td className="px-4 py-5 w-px whitespace-nowrap">
                            {product.on_sale && product.sale_price ? (
                               <div className="inline-flex items-center gap-1.5 text-amber-400 font-black text-xs">
                                  <Percent className="w-3.5 h-3.5" />
@@ -960,7 +960,7 @@ export default function ProductManagerView({ config }: Props) {
                               <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.2em]">Non</span>
                            )}
                         </td>
-                        <td className="px-6 py-5 text-right">
+                        <td className="px-3 py-5 text-right">
                            <div className="flex items-center justify-end gap-2">
                               <button 
                                  onClick={() => {

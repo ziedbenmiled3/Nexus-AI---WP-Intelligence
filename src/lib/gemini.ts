@@ -2,20 +2,50 @@ import api from './api';
 import { CompetitorData } from '../types';
 import { safeJsonParse } from './utils';
 
-const callAiProxy = async (payload: any, customKey?: string) => {
+export interface GeminiResponse {
+  text: string;
+  candidates: any[];
+  response?: any;
+  data: {
+    text: string;
+    candidates: any[];
+    response?: any;
+  };
+  inlineData?: {
+    data: string;
+    mimeType: string;
+  };
+}
+
+export const geminiQuery = async (payload: any, customKey?: string): Promise<GeminiResponse> => {
   try {
     const headers: Record<string, string> = {};
     if (customKey) {
       headers['x-gemini-key'] = customKey;
     }
+
     const res = await api.post('/api/gemini', payload, { headers });
-    return res.data;
+    
+    // Normalize response for components that expect axial-like structure or direct fields
+    const result: GeminiResponse = {
+      text: res.data.text,
+      candidates: res.data.candidates || [],
+      data: res.data,
+      response: res.data
+    };
+
+    if (res.data.inlineData) {
+      result.inlineData = res.data.inlineData;
+    }
+    
+    return result;
   } catch (error: any) {
-    console.error("AI Proxy Error:", error);
-    // Error message is already enriched by api interceptor
+    console.error("Gemini Proxy Error:", error);
     throw error;
   }
 };
+
+const callAiProxy = geminiQuery;
 
 const cleanJsonResponse = (text: string) => {
   // Remove markdown code blocks if present
@@ -354,7 +384,7 @@ export const researchCompetitors = async (niche: string, country: string, custom
   return safeJsonParse(cleanJsonResponse(data.text), { competitors: [], trend: [], marketSummary: '' });
 };
 
-export const generatePromoVideoScript = async (productName: string, description: string) => {
+export const generatePromoVideoScript = async (productName: string, description: string, customKey?: string) => {
   const prompt = `Create a promotional video script for the product: "${productName}". 
     Description: ${description}
     Include scenes, text overlays, and voiceover script.
@@ -384,16 +414,16 @@ export const generatePromoVideoScript = async (productName: string, description:
       },
       required: ["scenes"]
     }
-  });
+  }, customKey);
   return safeJsonParse(cleanJsonResponse(data.text), { scenes: [] });
 };
 
-export const improveImagePrompt = async (productDetails: string) => {
+export const improveImagePrompt = async (productDetails: string, customKey?: string) => {
   const data = await callAiProxy({
     model: "gemini-3-flash-preview",
     prompt: `Given these product details: "${productDetails}", generate a high-quality photorealistic prompt for a studio packshot. Focus on lighting, background, and sharp details.`,
     systemInstruction: "Tu es un directeur de photographie expert en packshots studio pour l'e-commerce de luxe."
-  });
+  }, customKey);
   return data.text;
 };
 
@@ -482,7 +512,7 @@ export const injectKeywordIntoContent = async (content: string, title: string, k
   return data.text;
 };
 
-export const editProductImage = async (base64Image: string, instructions: string) => {
+export const editProductImage = async (base64Image: string, instructions: string, customKey?: string) => {
   const data = await callAiProxy({
     model: 'gemini-3-flash-preview',
     contents: [
@@ -493,10 +523,10 @@ export const editProductImage = async (base64Image: string, instructions: string
         },
       },
       {
-        text: instructions,
+        parts: [{ text: instructions }],
       },
     ],
-  });
+  }, customKey);
     
   if (data.inlineData) {
     return `data:image/png;base64,${data.inlineData.data}`;

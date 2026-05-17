@@ -25,15 +25,22 @@ import {
   Command
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { firebaseService } from '../services/firebaseService';
 import { useAuth } from '../providers/FirebaseProvider';
 import { cn } from '../lib/utils';
-
+import { testGeminiConnection } from '../lib/gemini';
 import MatrixController from './MatrixController';
 
-export default function SuperAdminView({ setActiveTab }: { setActiveTab: (tab: string) => void }) {
+export default function SuperAdminView({ 
+  setActiveTab, 
+  settings = {},
+  plans: cloudPlans = []
+}: { 
+  setActiveTab: (tab: string) => void,
+  settings?: any,
+  plans?: any[]
+}) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [subscribers, setSubscribers] = useState<any[]>([]);
@@ -76,30 +83,33 @@ export default function SuperAdminView({ setActiveTab }: { setActiveTab: (tab: s
   // Load data immediately
   useEffect(() => {
     loadData();
-    fetchMasterKey();
   }, [user]);
 
-  const fetchMasterKey = async () => {
-    if (user?.email?.toLowerCase() !== 'ziedbenmiled3@gmail.com') return;
-    try {
-      const res = await axios.get('/api/admin/master-key', {
-        headers: { 'x-user-email': user.email }
-      });
-      setGeminiMasterKey(res.data.key || '');
-    } catch (err) {
-      console.error('Fetch master key error:', err);
+  // Sync master key from settings prop
+  useEffect(() => {
+    if (settings && settings.gemini_master_key) {
+      setGeminiMasterKey(settings.gemini_master_key);
     }
-  };
+  }, [settings]);
+
+  // Load mapping from props to state
+  useEffect(() => {
+    if (cloudPlans && cloudPlans.length > 0) {
+      setPlans(cloudPlans);
+    }
+  }, [cloudPlans]);
 
   const handleTestKey = async () => {
     if (!geminiMasterKey) return;
     setIsTestingKey(true);
     setTestResult(null);
     try {
-      const res = await axios.post('/api/admin/test-key', { key: geminiMasterKey });
-      setTestResult({ success: true, count: res.data.models_count, models: res.data.models });
+      const res = await testGeminiConnection(geminiMasterKey);
+      // testGeminiConnection returns simplified text or response object
+      // We rely on the fact that if it doesn't throw, it's successful
+      setTestResult({ success: true });
     } catch (err: any) {
-      setTestResult({ success: false, error: err.response?.data?.error || err.message });
+      setTestResult({ success: false, error: err.message });
     } finally {
       setIsTestingKey(false);
     }
@@ -109,13 +119,11 @@ export default function SuperAdminView({ setActiveTab }: { setActiveTab: (tab: s
     if (!user?.email) return;
     setIsSavingMasterKey(true);
     try {
-      await axios.post('/api/admin/master-key', { value: geminiMasterKey }, {
-        headers: { 'x-user-email': user.email }
-      });
-      alert('Clé Master AI enregistrée avec succès.');
+      await firebaseService.updateSetting('gemini_master_key', geminiMasterKey);
+      alert('Clé Master AI enregistrée avec succès dans le Cloud.');
     } catch (err) {
       console.error('Save master key error:', err);
-      alert("Erreur lors de l'enregistrement.");
+      alert("Erreur lors de l'enregistrement vers Firestore.");
     } finally {
       setIsSavingMasterKey(false);
     }

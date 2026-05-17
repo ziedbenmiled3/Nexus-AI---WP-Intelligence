@@ -91,7 +91,7 @@ export default function AuditView({ config }: { config: WPConfig }) {
         FIRST CONTENT: ${Array.isArray(posts) && posts[0] ? posts[0].content.rendered.substring(0, 1000) : ''}
       `;
       
-      const res = await auditContent(combinedText, 'post', 'Site Global Audit');
+      const res = await auditContent(combinedText, 'post', 'Site Global Audit', config.geminiApiKey);
       
       setAuditStep('Compilation du rapport de santé...');
       await new Promise(r => setTimeout(r, 800));

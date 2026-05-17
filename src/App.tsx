@@ -932,7 +932,7 @@ export default function App() {
               {activeTab === 'internal-links' && config && <InternalLinkView config={config} />}
               {activeTab === 'maintenance' && config && <MaintenanceView config={config} />}
               {activeTab === 'pricing' && <PricingView currentSub={subscription} settings={settings} onPurchased={() => user?.email && fetchSubscription(user.email)} setActiveTab={setActiveTab} />}
-              {activeTab === 'super' && <SuperAdminView setActiveTab={setActiveTab} />}
+              {activeTab === 'super' && <SuperAdminView setActiveTab={setActiveTab} settings={settings} plans={plans} />}
               {activeTab === 'vision' && <div className="p-8 text-slate-500 font-black uppercase tracking-widest text-center mt-20">Vision Succès en cours de développement...</div>}
               {activeTab === 'sites' && <SitesView currentConfig={config} onSwitch={handleSwitchSite} currentSub={subscription} sites={sites} setSites={setSites} />}
               {activeTab === 'settings' && config && <SettingsView config={config} />}

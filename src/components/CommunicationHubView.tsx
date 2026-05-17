@@ -8,6 +8,7 @@ import {
   Plus, 
   Bot, 
   Clock, 
+  Save,
   CheckCircle2, 
   XCircle, 
   RefreshCw,
@@ -18,7 +19,9 @@ import {
   ChevronRight,
   ShieldCheck,
   Eye,
-  Settings
+  Settings,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -26,6 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../providers/FirebaseProvider';
 import { cn } from '../lib/utils';
 import Sparkline from './Sparkline';
+import { geminiQuery } from '../lib/gemini';
 
 type Tab = 'analytics' | 'automations' | 'templates' | 'settings';
 
@@ -36,6 +40,16 @@ interface EmailTemplate {
   body_html: string;
   category: string;
   is_ai_generated: number;
+}
+
+interface AutomationRule {
+  id: number;
+  name: string;
+  description: string;
+  trigger_key: string;
+  scope: string;
+  is_active: number;
+  template_id: number;
 }
 
 interface SmtpSettings {
@@ -64,6 +78,7 @@ export default function CommunicationHubView() {
     from_email: ''
   });
   const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
   const [smtpStatus, setSmtpStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   // Templates State
@@ -71,6 +86,19 @@ export default function CommunicationHubView() {
   const [isAiComposing, setIsAiComposing] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [generatedTemplate, setGeneratedTemplate] = useState<{name: string, subject: string, body: string} | null>(null);
+  
+  // Manual Template Creation/Edit State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'code' | 'preview'>('code');
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
+  const [formTemplate, setFormTemplate] = useState({ name: '', subject: '', body_html: '' });
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Rules State
+  const [rules, setRules] = useState<AutomationRule[]>([]);
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [formRule, setFormRule] = useState({ name: '', description: '', trigger_key: '', scope: '', template_id: 0 });
+  const [isSavingRule, setIsSavingRule] = useState(false);
 
   // Analytics State
   const [analytics, setAnalytics] = useState<any[]>([]);
@@ -80,6 +108,7 @@ export default function CommunicationHubView() {
       fetchSettings();
       fetchTemplates();
       fetchAnalytics();
+      fetchRules();
     }
   }, [user]);
 
@@ -104,11 +133,23 @@ export default function CommunicationHubView() {
     } catch (err) { console.error('Fetch analytics error:', err); }
   };
 
+  const fetchRules = async () => {
+    try {
+      const res = await axios.get('/api/comm/rules', { headers: { 'x-user-email': user?.email } });
+      setRules(res.data);
+    } catch (err) { console.error('Fetch rules error:', err); }
+  };
+
   const handleSaveSettings = async () => {
+    setIsSavingSmtp(true);
     try {
       await axios.post('/api/comm/settings', smtpSettings, { headers: { 'x-user-email': user?.email } });
-      alert('Paramètres SMTP enregistrés.');
-    } catch (err) { alert('Erreur lors de l’enregistrement.'); }
+      alert('Paramètres SMTP enregistrés avec succès.');
+    } catch (err) { 
+      alert('Erreur lors de l’enregistrement.'); 
+    } finally {
+      setIsSavingSmtp(false);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -133,11 +174,12 @@ export default function CommunicationHubView() {
         ? "Vous êtes l'assistant Nexus AI. Rédigez un email professionnel pour les clients de la plateforme SaaS Nexus. Utilisez le ton 'High-Tech' et 'Cyber'. Répondez en JSON avec: { 'name': 'Nom de la template', 'subject': 'Objet', 'body': 'Contenu HTML' }"
         : "Vous êtes l'assistant Nexus AI pour WooCommerce. Rédigez un email marketing/opérationnel pour les clients d'une boutique en ligne. Répondez en JSON avec: { 'name': 'Template Name', 'subject': 'Subject', 'body': 'HTML Content' }";
       
-      const res = await axios.post('/api/gemini', {
+      const res = await geminiQuery({
+        model: "gemini-3-flash-preview",
         prompt: `Rédigez une template d'email basée sur ceci: ${aiPrompt}. Utilisez des placeholders comme {{user_name}} ou {{order_id}}.`,
         systemInstruction: systemPrompt,
         responseMimeType: 'application/json'
-      }, { headers: { 'x-user-email': user?.email } });
+      });
 
       const parsed = JSON.parse(res.data.text);
       setGeneratedTemplate(parsed);
@@ -162,6 +204,93 @@ export default function CommunicationHubView() {
       setAiPrompt('');
       fetchTemplates();
     } catch (err) { alert('Erreur lors de la sauvegarde.'); }
+  };
+
+  const handleOpenCreateModal = () => {
+    setEditingTemplate(null);
+    setFormTemplate({ name: '', subject: '', body_html: '' });
+    setModalMode('code');
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (tpl: EmailTemplate) => {
+    setEditingTemplate(tpl);
+    setFormTemplate({ name: tpl.name, subject: tpl.subject, body_html: tpl.body_html });
+    setModalMode('code');
+    setIsModalOpen(true);
+  };
+
+  const handleSaveManualTemplate = async () => {
+    if (!formTemplate.name || !formTemplate.subject || !formTemplate.body_html) {
+      alert('Veuillez remplir tous les champs.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      if (editingTemplate) {
+        // Update
+        await axios.put(`/api/comm/templates/${editingTemplate.id}`, {
+          ...formTemplate,
+          category: editingTemplate.category,
+          is_ai_generated: editingTemplate.is_ai_generated
+        }, { headers: { 'x-user-email': user?.email } });
+      } else {
+        // Create
+        await axios.post('/api/comm/templates', {
+          ...formTemplate,
+          category: (user?.email?.toLowerCase() === 'ziedbenmiled3@gmail.com') ? 'saas' : 'woo',
+          is_ai_generated: 0
+        }, { headers: { 'x-user-email': user?.email } });
+      }
+      setIsModalOpen(false);
+      fetchTemplates();
+    } catch (err) {
+      alert('Erreur lors de l’enregistrement.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: number) => {
+    if (!confirm('Supprimer cette template ?')) return;
+    try {
+      await axios.delete(`/api/comm/templates/${id}`, { headers: { 'x-user-email': user?.email } });
+      fetchTemplates();
+    } catch (err) { alert('Erreur lors de la suppression.'); }
+  };
+
+  const handleToggleRule = async (ruleId: number, currentStatus: number) => {
+    try {
+      await axios.patch(`/api/comm/rules/${ruleId}/toggle`, { is_active: currentStatus === 1 ? 0 : 1 }, {
+        headers: { 'x-user-email': user?.email }
+      });
+      fetchRules();
+    } catch (err) { alert('Erreur lors du changement de statut.'); }
+  };
+
+  const handleSaveRule = async () => {
+    if (!formRule.name || !formRule.trigger_key || !formRule.template_id) {
+      alert('Veuillez remplir les champs obligatoires.');
+      return;
+    }
+    setIsSavingRule(true);
+    try {
+      await axios.post('/api/comm/rules', {
+        ...formRule,
+        scope: user?.email?.toLowerCase() === 'ziedbenmiled3@gmail.com' ? 'saas' : 'woo'
+      }, { headers: { 'x-user-email': user?.email } });
+      setIsRuleModalOpen(false);
+      fetchRules();
+    } catch (err) { alert('Erreur lors de l’enregistrement.'); }
+    finally { setIsSavingRule(false); }
+  };
+
+  const handleDeleteRule = async (id: number) => {
+    if (!confirm('Supprimer cette règle ?')) return;
+    try {
+      await axios.delete(`/api/comm/rules/${id}`, { headers: { 'x-user-email': user?.email } });
+      fetchRules();
+    } catch (err) { alert('Erreur lors de la suppression.'); }
   };
 
   return (
@@ -337,7 +466,10 @@ export default function CommunicationHubView() {
 
             {/* Template List */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <button className="bg-slate-950 border border-dashed border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center gap-4 hover:border-purple-500/50 transition-all group">
+              <button 
+                onClick={handleOpenCreateModal}
+                className="bg-slate-950 border border-dashed border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center gap-4 hover:border-purple-500/50 transition-all group"
+              >
                  <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center group-hover:bg-purple-600/10 transition-all">
                     <Plus className="w-6 h-6 text-slate-600 group-hover:text-purple-500" />
                  </div>
@@ -358,8 +490,16 @@ export default function CommunicationHubView() {
                    <p className="text-[9px] font-bold text-slate-500 truncate mb-6">{tpl.subject}</p>
                    
                    <div className="flex items-center gap-2 pt-4 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-all">
-                      <button className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-[8px] font-black text-white uppercase tracking-widest transition-all">Editer</button>
-                      <button className="p-2 text-slate-600 hover:text-red-500 transition-all">
+                      <button 
+                        onClick={() => handleOpenEditModal(tpl)}
+                        className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-[8px] font-black text-white uppercase tracking-widest transition-all"
+                      >
+                        Editer
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteTemplate(tpl.id)}
+                        className="p-2 text-slate-600 hover:text-red-500 transition-all"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                    </div>
@@ -382,39 +522,57 @@ export default function CommunicationHubView() {
                   <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-3">
                     <Zap className="w-4 h-4" /> Règles d’Automations Actives
                   </h3>
-                  <button className="bg-purple-600 text-white px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/20">
+                  <button 
+                    onClick={() => {
+                      setFormRule({ name: '', description: '', trigger_key: '', scope: '', template_id: templates[0]?.id || 0 });
+                      setIsRuleModalOpen(true);
+                    }}
+                    className="bg-purple-600 text-white px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/20"
+                  >
                     NOUVELLE RÈGLE
                   </button>
                </div>
 
                <div className="space-y-4">
-                  {[
-                    { event: 'Paiement Nexus Réussi (SaaS)', info: 'Envoie immédiatement le reçu digital', active: true, user: 'ziedbenmiled3@gmail.com' },
-                    { event: 'Nouvelle Commande (WooCommerce)', info: 'Confirmation envoyée au client final', active: true, user: 'client' },
-                    { event: 'Abandon de Panier > 24h', info: 'Rappel soft avec coupon dynamique', active: false, user: 'client' },
-                  ].map((rule, i) => (
-                    <div key={i} className="flex items-center justify-between p-6 bg-slate-950/60 border border-slate-800 rounded-3xl hover:border-slate-700 transition-all">
+                  {rules.length === 0 && (
+                    <div className="p-10 text-center opacity-20 border border-dashed border-slate-800 rounded-3xl">
+                      <Zap className="w-10 h-10 mx-auto mb-4" />
+                      <p className="text-[10px] font-black uppercase tracking-widest">Aucune règle configurée</p>
+                    </div>
+                  )}
+                  {rules.map((rule) => (
+                    <div key={rule.id} className="flex items-center justify-between p-6 bg-slate-950/60 border border-slate-800 rounded-3xl hover:border-slate-700 transition-all group">
                        <div className="flex items-center gap-5">
-                          <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center border", rule.active ? "bg-emerald-600/10 border-emerald-500/20" : "bg-slate-900 border-slate-800")}>
-                             <Zap className={cn("w-6 h-6", rule.active ? "text-emerald-500" : "text-slate-700")} />
+                          <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center border", rule.is_active === 1 ? "bg-emerald-600/10 border-emerald-500/20" : "bg-slate-900 border-slate-800")}>
+                             <Zap className={cn("w-6 h-6", rule.is_active === 1 ? "text-emerald-500" : "text-slate-700")} />
                           </div>
                           <div>
-                             <p className="text-[11px] font-black text-white uppercase tracking-tight">{rule.event}</p>
-                             <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">{rule.info}</p>
+                             <p className="text-[11px] font-black text-white uppercase tracking-tight">{rule.name}</p>
+                             <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">{rule.description || 'Action automatisée intelligente'}</p>
                           </div>
                        </div>
                        <div className="flex items-center gap-6">
                           <div className="flex flex-col items-end">
                              <div className={cn(
                                "px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest",
-                               rule.user === 'ziedbenmiled3@gmail.com' ? "bg-blue-600/10 text-blue-500 border border-blue-500/20" : "bg-purple-600/10 text-purple-500 border border-purple-500/20"
+                               rule.scope === 'saas' ? "bg-blue-600/10 text-blue-500 border border-blue-500/20" : "bg-purple-600/10 text-purple-500 border border-purple-500/20"
                              )}>
-                               {rule.user === 'ziedbenmiled3@gmail.com' ? 'SCOPE: NEXUS SAAS' : 'SCOPE: WOO STORE'}
+                               {rule.scope === 'saas' ? 'SCOPE: NEXUS SAAS' : 'SCOPE: WOO STORE'}
                              </div>
+                             <p className="text-[8px] font-bold text-slate-600 uppercase mt-1">Trigger: {rule.trigger_key}</p>
                           </div>
-                          <div className="w-10 h-6 bg-slate-950 border border-slate-800 rounded-full p-1 cursor-pointer">
-                             <div className={cn("w-4 h-4 rounded-full transition-all", rule.active ? "bg-emerald-500 ml-4" : "bg-slate-700")} />
+                          <div 
+                            onClick={() => handleToggleRule(rule.id, rule.is_active)}
+                            className="w-10 h-6 bg-slate-950 border border-slate-800 rounded-full p-1 cursor-pointer"
+                          >
+                             <div className={cn("w-4 h-4 rounded-full transition-all", rule.is_active === 1 ? "bg-emerald-500 ml-4" : "bg-slate-700")} />
                           </div>
+                          <button 
+                            onClick={() => handleDeleteRule(rule.id)}
+                            className="p-2 text-slate-800 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                        </div>
                     </div>
                   ))}
@@ -437,7 +595,7 @@ export default function CommunicationHubView() {
                </h3>
 
                <div className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Serveur SMTP Host</label>
                        <input 
@@ -456,6 +614,29 @@ export default function CommunicationHubView() {
                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-[11px] text-blue-400 focus:border-blue-500 outline-none transition-all"
                          placeholder="587"
                        />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Sécurité</label>
+                       <div className="flex bg-slate-950 border border-slate-800 rounded-2xl p-1 gap-1">
+                          <button 
+                            onClick={() => setSmtpSettings({...smtpSettings, secure: 0})}
+                            className={cn(
+                              "flex-1 py-3 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                              smtpSettings.secure === 0 ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-300"
+                            )}
+                          >
+                            <Unlock className="w-3 h-3" /> TLS
+                          </button>
+                          <button 
+                            onClick={() => setSmtpSettings({...smtpSettings, secure: 1})}
+                            className={cn(
+                              "flex-1 py-3 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                              smtpSettings.secure === 1 ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40" : "text-slate-500 hover:text-slate-300"
+                            )}
+                          >
+                            <Lock className="w-3 h-3" /> SSL
+                          </button>
+                       </div>
                     </div>
                   </div>
 
@@ -513,9 +694,11 @@ export default function CommunicationHubView() {
                     </button>
                     <button 
                       onClick={handleSaveSettings}
-                      className="flex-1 py-5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:bg-blue-500 transition-all flex items-center justify-center gap-3"
+                      disabled={isSavingSmtp}
+                      className="flex-1 py-5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:bg-blue-500 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                     >
-                      <Save className="w-4 h-4" /> ENREGISTRER CONFIG
+                      {isSavingSmtp ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {isSavingSmtp ? 'ENREGISTREMENT...' : 'ENREGISTRER CONFIG'}
                     </button>
                   </div>
 
@@ -566,27 +749,235 @@ export default function CommunicationHubView() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
+      
+      {/* Manual Template Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-10">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsModalOpen(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-xl"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#0c0e14] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-10">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-600/20 rounded-xl flex items-center justify-center border border-purple-500/20">
+                      <Layout className="w-5 h-5 text-purple-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-white uppercase italic tracking-tight">
+                        {editingTemplate ? 'Editer Template' : 'Nouvelle Template'}
+                      </h3>
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Configuration manuelle du script email</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsModalOpen(false)}
+                    className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl text-slate-400 transition-all"
+                  >
+                    <Mail className="w-5 h-5" />
+                  </button>
+                </div>
 
-function Save({ className }: { className?: string }) {
-  return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width="24" 
-      height="24" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      className={className}
-    >
-      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-      <polyline points="17 21 17 13 7 13 7 21"></polyline>
-      <polyline points="7 3 7 8 15 8"></polyline>
-    </svg>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Nom de la Template</label>
+                    <input 
+                      value={formTemplate.name}
+                      onChange={(e) => setFormTemplate({ ...formTemplate, name: e.target.value })}
+                      placeholder="Ex: Welcome Email Pro"
+                      className="w-full bg-black/50 border border-slate-800 rounded-2xl px-6 py-4 text-[11px] text-white focus:border-purple-500 outline-none transition-all placeholder:text-slate-700"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Objet de l'Email</label>
+                    <input 
+                      value={formTemplate.subject}
+                      onChange={(e) => setFormTemplate({ ...formTemplate, subject: e.target.value })}
+                      placeholder="Ex: Bienvenue sur Nexus AI !"
+                      className="w-full bg-black/50 border border-slate-800 rounded-2xl px-6 py-4 text-[11px] text-white focus:border-purple-500 outline-none transition-all placeholder:text-slate-700"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Corps du Message</label>
+                      <div className="flex bg-black/50 p-1 rounded-xl border border-white/5">
+                        <button 
+                          onClick={() => setModalMode('code')}
+                          className={cn(
+                            "px-4 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all",
+                            modalMode === 'code' ? "bg-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                          )}
+                        >
+                          Code HTML
+                        </button>
+                        <button 
+                          onClick={() => setModalMode('preview')}
+                          className={cn(
+                            "px-4 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all",
+                            modalMode === 'preview' ? "bg-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                          )}
+                        >
+                          Aperçu Visuel
+                        </button>
+                      </div>
+                    </div>
+
+                    {modalMode === 'code' ? (
+                      <textarea 
+                        value={formTemplate.body_html}
+                        onChange={(e) => setFormTemplate({ ...formTemplate, body_html: e.target.value })}
+                        placeholder="Tapez le contenu de votre email ici..."
+                        className="w-full h-64 bg-black/50 border border-slate-800 rounded-3xl p-6 text-[11px] font-mono text-slate-300 focus:border-purple-500 outline-none transition-all placeholder:text-slate-700 resize-none"
+                      />
+                    ) : (
+                      <div className="w-full h-64 bg-white rounded-3xl overflow-hidden border border-slate-800">
+                        <iframe 
+                          srcDoc={`
+                            <html>
+                              <head>
+                                <style>
+                                  body { font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6; }
+                                  * { max-width: 100%; }
+                                </style>
+                              </head>
+                              <body>${formTemplate.body_html || '<p style="color: #999">Aucun contenu à prévisualiser...</p>'}</body>
+                            </html>
+                          `}
+                          className="w-full h-full border-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={handleSaveManualTemplate}
+                    disabled={isSaving}
+                    className="w-full py-5 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-purple-900/40 disabled:opacity-50"
+                  >
+                    {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    {isSaving ? 'ENREGISTREMENT...' : 'SAUVEGARDER LA TEMPLATE'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Rule Modal */}
+      <AnimatePresence>
+        {isRuleModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-10">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRuleModalOpen(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-xl"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg bg-[#0c0e14] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-10">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-600/20 rounded-xl flex items-center justify-center border border-emerald-500/20">
+                      <Zap className="w-5 h-5 text-emerald-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-white uppercase italic tracking-tight">Nouvelle Règle</h3>
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Automation de communication intelligente</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsRuleModalOpen(false)}
+                    className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl text-slate-400 transition-all"
+                  >
+                    <Zap className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Nom de la Règle</label>
+                    <input 
+                      value={formRule.name}
+                      onChange={(e) => setFormRule({ ...formRule, name: e.target.value })}
+                      placeholder="Ex: Confirmation de Commande"
+                      className="w-full bg-black/50 border border-slate-800 rounded-2xl px-6 py-4 text-[11px] text-white focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Déclencheur (Trigger Key)</label>
+                    <select 
+                      value={formRule.trigger_key}
+                      onChange={(e) => setFormRule({ ...formRule, trigger_key: e.target.value })}
+                      className="w-full bg-black/50 border border-slate-800 rounded-2xl px-6 py-4 text-[11px] text-white focus:border-emerald-500 outline-none transition-all"
+                    >
+                      <option value="">Sélectionner un évènement</option>
+                      <option value="new_order">Nouvelle Commande (Woo)</option>
+                      <option value="order_completed">Commande Terminée (Woo)</option>
+                      <option value="abandoned_cart">Panier Abandonné (Woo)</option>
+                      <option value="new_subscription">Nouvel Abonnement (SaaS)</option>
+                      <option value="payment_failed">Échec de Paiement (SaaS)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Template à Envoyer</label>
+                    <select 
+                      value={formRule.template_id}
+                      onChange={(e) => setFormRule({ ...formRule, template_id: parseInt(e.target.value) })}
+                      className="w-full bg-black/50 border border-slate-800 rounded-2xl px-6 py-4 text-[11px] text-white focus:border-emerald-500 outline-none transition-all"
+                    >
+                      <option value={0}>Choisir une template</option>
+                      {templates.map(tpl => (
+                        <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Description (Optionnel)</label>
+                    <textarea 
+                      value={formRule.description}
+                      onChange={(e) => setFormRule({ ...formRule, description: e.target.value })}
+                      placeholder="Petit résumé de l'action..."
+                      className="w-full h-24 bg-black/50 border border-slate-800 rounded-3xl p-6 text-[11px] text-slate-300 focus:border-emerald-500 outline-none transition-all resize-none"
+                    />
+                  </div>
+
+                  <button 
+                    onClick={handleSaveRule}
+                    disabled={isSavingRule}
+                    className="w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-900/40 disabled:opacity-50"
+                  >
+                    {isSavingRule ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    {isSavingRule ? 'CRÉATION...' : 'ACTIVER LA RÈGLE'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

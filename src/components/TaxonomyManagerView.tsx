@@ -21,7 +21,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { WPConfig } from '../types';
 import { wpFetch } from '../lib/wordpress';
 import ReactMarkdown from 'react-markdown';
-import api from '../lib/api';
+import { geminiQuery } from '../lib/gemini';
 
 interface TaxonomyItem {
   id: number;
@@ -221,13 +221,11 @@ Exemple de format JSON attendu :
 Utilise strictement les IDs fournis dans les données suivantes pour tes actions.
 Data: ${JSON.stringify(taxonomyData)}`;
 
-      const res = await api.post('/api/gemini', {
-        model: "gemini-1.5-flash", // Using flash for speed/cost
+      const res = await geminiQuery({
+        model: "gemini-3-flash-preview", 
         prompt,
         systemInstruction: "Tu es un expert SEO et UX e-commerce. Tu fournis des analyses précises et des actions concrètes au format JSON."
-      }, {
-        headers: config.geminiApiKey ? { 'x-gemini-key': config.geminiApiKey } : {}
-      });
+      }, config.geminiApiKey);
 
       const text = res.data.text || "";
       
