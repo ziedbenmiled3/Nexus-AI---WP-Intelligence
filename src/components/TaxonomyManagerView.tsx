@@ -269,19 +269,14 @@ Data: ${JSON.stringify(taxonomyData)}`;
   };
 
   const applyAiRecommendations = async () => {
-    if (pendingActions.length === 0) {
-      alert("Nexus n'a pas détecté d'actions automatiques sûres pour cette analyse. Veuillez suivre les recommandations manuellement.");
-      setShowAiModal(false);
-      return;
-    }
-
-    if (!confirm(`Nexus va tenter d'appliquer ${pendingActions.length} modifications sur votre boutique WooCommerce. Voulez-vous continuer ?`)) return;
+    if (pendingActions.length === 0) return;
 
     setIsApplying(true);
     setApplyProgress({ current: 0, total: pendingActions.length, label: 'Initialisation...' });
     
     let successCount = 0;
     let failCount = 0;
+    const createdIds: Record<string, number> = {};
 
     try {
       const endpoint_base = activeType === 'category' ? '/wc/v3/products/categories' : '/wc/v3/products/tags';
@@ -292,15 +287,28 @@ Data: ${JSON.stringify(taxonomyData)}`;
         setApplyProgress({ 
             current: i + 1, 
             total: pendingActions.length, 
-            label: `${action.type === 'update' ? 'Mise à jour' : action.type === 'create' ? 'Création' : 'Suppression'} de ${actionName}` 
+            label: `Action ${i+1}/${pendingActions.length}: ${actionName}` 
         });
 
         try {
+          // Parent ID Replacement Logic for hierarchical categories
+          let finalParent = action.parent;
+          if (typeof finalParent === 'string' && createdIds[finalParent]) {
+            finalParent = createdIds[finalParent];
+          } else if (typeof finalParent === 'string') {
+            // Try matching by name if it looks like a placeholder
+            const foundId = Object.entries(createdIds).find(([name]) => 
+              name.toLowerCase() === finalParent.toLowerCase() || 
+              `new_${name.toLowerCase().replace(/\s+/g, '_')}_id` === finalParent.toLowerCase()
+            )?.[1];
+            if (foundId) finalParent = foundId;
+          }
+
           if (action.type === 'update' && action.id) {
             const payload: any = {};
             if (action.name) payload.name = action.name;
             if (action.description) payload.description = action.description;
-            if (activeType === 'category' && typeof action.parent === 'number') payload.parent = action.parent;
+            if (activeType === 'category' && typeof finalParent === 'number') payload.parent = finalParent;
             
             await wpFetch(config, `${endpoint_base}/${action.id}`, 'PUT', payload);
           } else if (action.type === 'delete' && action.id) {
@@ -308,9 +316,14 @@ Data: ${JSON.stringify(taxonomyData)}`;
           } else if (action.type === 'create' && action.name) {
             const payload: any = { name: action.name };
             if (action.description) payload.description = action.description;
-            if (activeType === 'category' && typeof action.parent === 'number') payload.parent = action.parent;
+            if (activeType === 'category' && typeof finalParent === 'number') payload.parent = finalParent;
             
-            await wpFetch(config, endpoint_base, 'POST', payload);
+            const result = await wpFetch(config, endpoint_base, 'POST', payload);
+            if (result && result.id) {
+               createdIds[action.name] = result.id;
+               const slugName = action.name.toLowerCase().replace(/\s+/g, '_');
+               createdIds[`new_${slugName}_id`] = result.id;
+            }
           }
           successCount++;
         } catch (err) {
@@ -319,13 +332,23 @@ Data: ${JSON.stringify(taxonomyData)}`;
         }
       }
 
-      alert(`${successCount} actions appliquées avec succès.${failCount > 0 ? ` ${failCount} échecs.` : ''}`);
-      setShowAiModal(false);
-      fetchData();
+      // Instead of alert, we can show a brief success state
+      setApplyProgress({ 
+        current: pendingActions.length, 
+        total: pendingActions.length, 
+        label: `Terminé ! ${successCount} succès${failCount > 0 ? `, ${failCount} échecs` : ''}.` 
+      });
+      
+      setTimeout(() => {
+        setShowAiModal(false);
+        fetchData();
+      }, 2000);
     } catch (err: any) {
-      alert(`Erreur système : ${err.message}`);
+      console.error("Critical apply error:", err);
+      setApplyProgress(prev => ({ ...prev, label: `Erreur critique : ${err.message}` }));
+      setTimeout(() => setIsApplying(false), 5000);
     } finally {
-      setIsApplying(false);
+      // We don't setIsApplying(false) immediately so the user can see the final status
     }
   };
 
