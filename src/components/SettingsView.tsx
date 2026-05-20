@@ -10,7 +10,8 @@ import {
   Coins,
   Zap,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WPConfig } from '../types';
@@ -179,6 +180,79 @@ export default function SettingsView({ config }: { config: WPConfig }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
+  // Profile information states
+  const [profile, setProfile] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [profileSavedMsg, setProfileSavedMsg] = useState<string | null>(null);
+  const [profileErrorMsg, setProfileErrorMsg] = useState<string | null>(null);
+
+  const [username, setUsername] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [address, setAddress] = useState('');
+  const [zipCode, setZipCode] = useState('');
+  const [country, setCountry] = useState('');
+  const [phone, setPhone] = useState('');
+  const [company, setCompany] = useState('');
+
+  useEffect(() => {
+    if (user?.uid) {
+      setLoadingProfile(true);
+      firebaseService.getUserProfile(user.uid).then((p) => {
+        const uProfile = p as any;
+        if (uProfile) {
+          setProfile(uProfile);
+          setUsername(uProfile.username || '');
+          setFirstName(uProfile.first_name || '');
+          setLastName(uProfile.last_name || '');
+          setBirthDate(uProfile.birth_date || '');
+          setAddress(uProfile.address || '');
+          setZipCode(uProfile.zip_code || '');
+          setCountry(uProfile.country || '');
+          setPhone(uProfile.phone || '');
+          setCompany(uProfile.company || '');
+        }
+        setLoadingProfile(false);
+      });
+    }
+  }, [user]);
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileSavedMsg(null);
+    setProfileErrorMsg(null);
+    if (!user?.uid) return;
+
+    if (!username.trim() || !firstName.trim() || !lastName.trim() || !birthDate.trim() || !address.trim() || !zipCode.trim() || !country.trim() || !phone.trim() || !company.trim()) {
+      setProfileErrorMsg("Veuillez remplir l'intégralité des coordonnées obligatoires.");
+      return;
+    }
+
+    try {
+      const updated = {
+        username: username.trim(),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        display_name: `${firstName.trim()} ${lastName.trim()}`,
+        birth_date: birthDate,
+        address: address.trim(),
+        zip_code: zipCode.trim(),
+        country: country.trim(),
+        phone: phone.trim(),
+        company: company.trim(),
+        profile_completed: true,
+        updated_at: new Date().toISOString()
+      };
+      await firebaseService.updateUserProfile(user.uid, updated);
+      setProfileSavedMsg("Vos coordonnées ont été enregistrées avec succès dans la plateforme !");
+      setTimeout(() => setProfileSavedMsg(null), 4000);
+    } catch (err: any) {
+      console.error("Failed to update profile", err);
+      setProfileErrorMsg("Erreur lors de l'enregistrement de votre profil.");
+    }
+  };
+  
   // Diagnostic AI
   const [testingAPI, setTestingAPI] = useState(false);
   const [testResult, setTestResult] = useState<{ status: 'success' | 'error' | 'exception', message: string, detail?: string } | null>(null);
@@ -340,7 +414,7 @@ export default function SettingsView({ config }: { config: WPConfig }) {
                               type="text"
                               placeholder="Chercher une monnaie..."
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-[10px] font-bold text-slate-300 outline-none focus:border-indigo-500 transition-all"
-                              value={searchQuery}
+                              value={searchQuery || ''}
                               onChange={(e) => setSearchQuery(e.target.value)}
                             />
                           </div>
@@ -441,6 +515,7 @@ export default function SettingsView({ config }: { config: WPConfig }) {
           <button 
             onClick={() => setShowLogoutConfirm(true)}
             className="w-full py-4 bg-red-600/5 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/20 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] transition-all shadow-xl active:scale-[0.98]"
+            type="button"
           >
             Terminer la session
           </button>
@@ -468,12 +543,14 @@ export default function SettingsView({ config }: { config: WPConfig }) {
                        <button 
                          onClick={() => setShowLogoutConfirm(false)}
                          className="flex-1 py-4 bg-slate-800 text-slate-300 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all"
+                         type="button"
                        >
                          Annuler
                        </button>
                        <button 
                          onClick={handleLogout}
                          className="flex-1 py-4 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/40 hover:bg-red-500 transition-all"
+                         type="button"
                        >
                          Déconnexion
                        </button>
@@ -484,6 +561,159 @@ export default function SettingsView({ config }: { config: WPConfig }) {
           </AnimatePresence>
 
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-1 w-2/3 bg-gradient-to-r from-transparent via-red-500/20 to-transparent" />
+        </div>
+
+        {/* Coordonnées de Profil Obligatoires */}
+        <div className="bg-[#0a0c10] border border-slate-800 rounded-[2.5rem] p-10 relative overflow-hidden group lg:col-span-2">
+          <div className="flex items-center gap-4 mb-8 relative z-10">
+            <div className="w-12 h-12 bg-blue-600/10 rounded-2xl flex items-center justify-center border border-blue-500/20">
+              <User className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-white uppercase tracking-tighter italic">Coordonnées de Profil Obligatoires</h3>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Gérez vos informations personnelles requises</p>
+            </div>
+          </div>
+
+          {loadingProfile ? (
+            <div className="py-12 flex justify-center items-center">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+            </div>
+          ) : (
+            <form onSubmit={handleUpdateProfile} className="space-y-6 relative z-10">
+              {profileSavedMsg && (
+                <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl text-emerald-400 text-[10px] font-black uppercase tracking-widest text-center">
+                  {profileSavedMsg}
+                </div>
+              )}
+
+              {profileErrorMsg && (
+                <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest text-center">
+                  {profileErrorMsg}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Nom d'utilisateur</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Ex: zied_admin"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Numéro de téléphone</label>
+                  <input 
+                    type="tel" 
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Ex: +216 xx xxx xxx"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Prénom</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Votre prénom"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Nom de famille</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Votre nom de famille"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Date de naissance</label>
+                  <input 
+                    type="date" 
+                    required
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white outline-none focus:border-blue-500/50 [color-scheme:dark] transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Entreprise / Société</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Nom de l'entreprise"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Adresse Postale Complète</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Ex: Rue 14 Janvier, Tunis, Tunisie"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Code Postal (Zip Code)</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Ex: 2037"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Pays</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="w-full px-6 py-4 bg-black border border-slate-800 rounded-2xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 outline-none transition-all"
+                    placeholder="Ex: Tunisie, France..."
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button 
+                  type="submit"
+                  className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3 shadow-lg shadow-blue-900/20"
+                >
+                  DÉPOSER ET ENREGISTRER LES COORDONNÉES
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-blue-500/10 transition-all" />
         </div>
       </div>
     </div>

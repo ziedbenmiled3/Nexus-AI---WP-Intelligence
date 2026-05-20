@@ -55,6 +55,17 @@ const resources = {
         keyValid: 'CLÉ VALIDE',
         modelsFound: 'MODÈLES TROUVÉS',
         pinging: 'Ping API Google Gemini...'
+      },
+      ebook: {
+        badgeSidebar: 'Exclusivité Nexus',
+        badgeDashboard: 'Ressource Stratégique Recommandée',
+        bookTitle: 'IA + Dropshipping & E-commerce',
+        subtitle: 'Dominez le Marché de demain grâce à l\'IA',
+        description: 'Découvrez les protocoles d\'automatisation utilisés par les top 1% des e-commerçants pour scaler sans limites. Un guide pratique de 150+ pages pour transformer votre business.',
+        buttonDownload: 'Accéder au Guide Complet',
+        buttonAction: 'Télécharger le Guide',
+        readers: '1 200+ Lecteurs Satisfaits',
+        sidebarSub: 'Le guide stratégique complet pour dominer le marché en 2026.'
       }
     }
   },
@@ -110,6 +121,17 @@ const resources = {
         keyValid: 'KEY VALID',
         modelsFound: 'MODELS FOUND',
         pinging: 'Pinging Google Gemini API...'
+      },
+      ebook: {
+        badgeSidebar: 'Nexus Exclusive',
+        badgeDashboard: 'Recommended Strategic Resource',
+        bookTitle: 'AI + Dropshipping & E-Commerce',
+        subtitle: 'Dominate Tomorrow’s Market with AI',
+        description: 'Discover the automation protocols used by the top 1% of e-merchants to scale limitlessly. A 150+ page practical guide to transform your business.',
+        buttonDownload: 'Access the Full Guide',
+        buttonAction: 'Download Guide',
+        readers: '1,200+ Satisfied Readers',
+        sidebarSub: 'The complete strategic guide to dominating the market in 2026.'
       }
     }
   }

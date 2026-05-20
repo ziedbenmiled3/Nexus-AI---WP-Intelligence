@@ -7,6 +7,7 @@ import {
    Plus, 
    Tag, 
    Zap, 
+   ArrowUpDown,
    BrainCircuit, 
    Sparkles, 
    AlertCircle, 
@@ -41,7 +42,7 @@ import {
 import { WPConfig } from '../types';
 import { wpFetch } from '../lib/wordpress';
 import ReactMarkdown from 'react-markdown';
-import { geminiQuery } from '../lib/gemini';
+import { geminiQuery, suggestStockActions } from '../lib/gemini';
 
 interface Props {
   config: WPConfig;
@@ -107,6 +108,14 @@ export default function ProductManagerView({ config }: Props) {
   const [showAiModal, setShowAiModal] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationResult, setSimulationResult] = useState<string | null>(null);
+
+  // AI Stock Actions States
+  const [showAiActionsModal, setShowAiActionsModal] = useState(false);
+  const [aiActionsProduct, setAiActionsProduct] = useState<any | null>(null);
+  const [isGeneratingActions, setIsGeneratingActions] = useState(false);
+  const [aiActions, setAiActions] = useState<any[]>([]);
+  const [aiActionsSummary, setAiActionsSummary] = useState("");
+  const [executingActionId, setExecutingActionId] = useState<string | null>(null);
 
   // Bulk Promotion State
   const [isBulkPromoModalOpen, setIsBulkPromoModalOpen] = useState(false);
@@ -242,11 +251,93 @@ export default function ProductManagerView({ config }: Props) {
           stock_status: totalStock > 0 ? 'instock' : 'outofstock'
         } : p
       ));
+      return true;
     } catch (err: any) {
       console.error("Error updating variation stock:", err);
       setError(`Erreur stock : ${err.message || "Action impossible"}`);
       setTimeout(() => setError(null), 5000);
       setStatus({ variationUpdatingId: null });
+      return false;
+    }
+  };
+
+  const handleStockStatusClick = async (product: any) => {
+    if (product.type === 'variable') {
+      loadVariations(product.id);
+      return;
+    }
+    setAiActionsProduct(product);
+    setShowAiActionsModal(true);
+    setIsGeneratingActions(true);
+    setAiActions([]);
+    setAiActionsSummary("");
+
+    try {
+      const result = await suggestStockActions(product, currency, config.geminiApiKey);
+      setAiActions(result.suggestions || []);
+      setAiActionsSummary(result.analysisSummary || "");
+    } catch (err) {
+      console.error("AI Actions Error:", err);
+      setAiActionsSummary("Impossible de générer des suggestions pour le moment.");
+    } finally {
+      setIsGeneratingActions(false);
+    }
+  };
+
+  const executeAiAction = async (action: any) => {
+    if (!aiActionsProduct) return;
+    setExecutingActionId(action.label);
+
+    try {
+      if (action.type === 'RESTOCK') {
+        const currentQty = aiActionsProduct.stock_quantity || 0;
+        const newQuantity = currentQty + (action.value || 50);
+        setStatus({ updatingId: aiActionsProduct.id });
+        
+        await wpFetch(config, `/wc/v3/products/${aiActionsProduct.id}`, 'POST', {
+            stock_quantity: newQuantity,
+            manage_stock: true
+        });
+        
+        setProducts(prev => prev.map(p => 
+            p.id === aiActionsProduct.id ? { ...p, stock_quantity: newQuantity, stock_status: newQuantity > 0 ? 'instock' : 'outofstock' } : p
+        ));
+        
+        alert(`Succès : ${action.label} appliqué !`);
+        setShowAiActionsModal(false);
+      } else if (action.type === 'SALE' || action.type === 'PRICE_ADJUST') {
+        setStatus({ updatingId: aiActionsProduct.id });
+        const regularPrice = parseFloat(aiActionsProduct.regular_price || aiActionsProduct.price);
+        let salePrice = regularPrice;
+        
+        if (action.type === 'SALE') {
+          salePrice = regularPrice * (1 - (action.value || 15) / 100);
+        } else {
+          salePrice = action.value || regularPrice;
+        }
+
+        const finalSalePrice = Math.round(salePrice * 100) / 100;
+
+        await wpFetch(config, `/wc/v3/products/${aiActionsProduct.id}`, 'PUT', {
+          sale_price: finalSalePrice.toString(),
+          on_sale: true
+        });
+
+        setProducts(prev => prev.map(p => 
+          p.id === aiActionsProduct.id ? { ...p, sale_price: finalSalePrice.toString(), price: finalSalePrice.toString(), on_sale: true } : p
+        ));
+        
+        alert(`Succès : ${action.label} appliqué !`);
+        setShowAiActionsModal(false);
+      } else {
+        alert("Action complexe : Veuillez l'appliquer manuellement.");
+      }
+    } catch (err) {
+      console.error("Execute AI Action Error:", err);
+      alert("Échec de l'action AI.");
+    } finally {
+      setExecutingActionId(null);
+      setStatus({ updatingId: null });
     }
   };
   const filteredProducts = useMemo(() => {
@@ -924,7 +1015,7 @@ export default function ProductManagerView({ config }: Props) {
                <Search className="w-4 h-4 absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" />
                <input 
                   type="text" 
-                  value={search}
+                  value={search || ''}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Rechercher un produit..." 
                   className="w-full bg-slate-900/40 border border-slate-800/80 rounded-2xl py-4 pl-14 pr-6 text-xs font-bold text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/30 transition-all"
@@ -1055,30 +1146,29 @@ export default function ProductManagerView({ config }: Props) {
                            </div>
                         </td>
                         <td className="px-4 py-5 w-px whitespace-nowrap">
-                           <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                              product.stock_status === 'instock' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-500'
+                           <button 
+                              onClick={() => handleStockStatusClick(product)}
+                              className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 cursor-pointer border ${
+                              product.stock_status === 'instock' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
                            }`}>
                               <div className={`w-1.5 h-1.5 rounded-full ${
                                  product.stock_status === 'instock' ? 'bg-emerald-500' : 'bg-red-500'
                               }`} />
                               {product.type === 'variable' ? (
-                                 <button 
-                                   onClick={() => loadVariations(product.id)}
-                                   className="flex items-center gap-2 hover:text-white transition-colors"
-                                 >
+                                 <div className="flex items-center gap-2 hover:text-white transition-colors">
                                    <span>VARIABLE</span>
                                    {variationUpdatingId === product.id ? (
                                      <Loader2 className="w-3 h-3 animate-spin" />
                                    ) : (
                                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedVariationId === product.id ? 'rotate-180' : ''}`} />
                                    )}
-                                 </button>
+                                 </div>
                               ) : product.manage_stock === false ? (
                                  'STOCK OK'
                               ) : (
-                                 product.stock_status === 'instock' ? `${product.stock_quantity ?? 0} EN STOCK` : 'RUPTURE'
+                                 product.stock_status === 'instock' ? `${product.stock_quantity ?? 0} EN STOCK (AI)` : 'RUPTURE (AI)'
                               )}
-                           </div>
+                           </button>
                         </td>
                         <td className="px-4 py-5 w-px whitespace-nowrap">
                            <span className="text-xs font-black text-white">
@@ -1353,13 +1443,16 @@ export default function ProductManagerView({ config }: Props) {
 
                      {/* Stats Row */}
                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-5 rounded-3xl bg-slate-900/40 border border-slate-800">
-                           <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Statut Stock</p>
+                        <button 
+                           onClick={() => handleStockStatusClick(selectedProduct)}
+                           className="p-5 rounded-3xl bg-slate-900/40 border border-slate-800 text-left hover:border-indigo-500/30 transition-all active:scale-[0.98] group"
+                        >
+                           <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2 group-hover:text-indigo-400 transition-colors">Statut Stock (IA)</p>
                            <div className="flex items-center gap-2">
                               <div className={`w-2 h-2 rounded-full ${selectedProduct.stock_status === 'instock' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} />
                               <span className="text-xs font-black text-white uppercase">{selectedProduct.stock_status === 'instock' ? 'En Stock' : 'Rupture'}</span>
                            </div>
-                        </div>
+                        </button>
                         <div className="p-5 rounded-3xl bg-slate-900/40 border border-slate-800">
                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Quantité Réelle</p>
                            <span className="text-2xl font-black text-white">{selectedProduct.stock_quantity || 0}</span>
@@ -1560,7 +1653,7 @@ export default function ProductManagerView({ config }: Props) {
                         <div className="relative">
                            <input 
                               type="number"
-                              value={bulkPromoValue}
+                              value={bulkPromoValue || ''}
                               onChange={(e) => setBulkPromoValue(e.target.value)}
                               placeholder={bulkPromoType === 'percent' ? "Ex: 25" : `Ex: 15 ${currency}`}
                               className="w-full bg-slate-900 border border-slate-800 rounded-3xl py-6 px-8 text-xl font-black text-white placeholder:text-slate-700 focus:outline-none focus:border-amber-500/50 transition-all"
@@ -1579,7 +1672,7 @@ export default function ProductManagerView({ config }: Props) {
                            </label>
                            <input 
                               type="date"
-                              value={bulkDateStart}
+                              value={bulkDateStart || ''}
                               onChange={(e) => setBulkDateStart(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white focus:outline-none focus:border-indigo-500/50 transition-all [color-scheme:dark]"
                            />
@@ -1591,7 +1684,7 @@ export default function ProductManagerView({ config }: Props) {
                            </label>
                            <input 
                               type="date"
-                              value={bulkDateEnd}
+                              value={bulkDateEnd || ''}
                               onChange={(e) => setBulkDateEnd(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white focus:outline-none focus:border-indigo-500/50 transition-all [color-scheme:dark]"
                            />
@@ -1683,7 +1776,7 @@ export default function ProductManagerView({ config }: Props) {
                            </label>
                            <input 
                               type="date"
-                              value={promoDateStart}
+                              value={promoDateStart || ''}
                               onChange={(e) => setPromoDateStart(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white focus:outline-none focus:border-indigo-500/50 transition-all [color-scheme:dark]"
                            />
@@ -1695,7 +1788,7 @@ export default function ProductManagerView({ config }: Props) {
                            </label>
                            <input 
                               type="date"
-                              value={promoDateEnd}
+                              value={promoDateEnd || ''}
                               onChange={(e) => setPromoDateEnd(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white focus:outline-none focus:border-indigo-500/50 transition-all [color-scheme:dark]"
                            />
@@ -1733,7 +1826,7 @@ export default function ProductManagerView({ config }: Props) {
                         <div className="relative">
                            <input 
                               type="number"
-                              value={promoValue}
+                              value={promoValue || ''}
                               onChange={(e) => setPromoValue(e.target.value)}
                               placeholder={promoType === 'percent' ? "Ex: 20" : `Ex: 10 ${currency}`}
                               className="w-full bg-slate-900 border border-slate-800 rounded-3xl py-6 px-8 text-xl font-black text-white placeholder:text-slate-700 focus:outline-none focus:border-indigo-500/50 transition-all"
@@ -1856,6 +1949,116 @@ export default function ProductManagerView({ config }: Props) {
             </div>
          )}
       </AnimatePresence>
+      {/* AI Action Modal */}
+      <AnimatePresence>
+         {showAiActionsModal && aiActionsProduct && (
+            <>
+               <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowAiActionsModal(false)}
+                  className="fixed inset-0 bg-black/80 backdrop-blur-md z-[350]"
+               />
+               <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xl max-h-[85vh] bg-[#0d0f14] border border-slate-800 z-[351] shadow-2xl rounded-[3rem] overflow-hidden flex flex-col"
+               >
+                  {/* Header */}
+                  <div className="p-8 border-b border-slate-800 flex items-center justify-between bg-slate-900/10">
+                     <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                           <Zap className="w-6 h-6 text-indigo-400" />
+                         </div>
+                         <div>
+                            <h2 className="text-lg font-black text-white uppercase tracking-widest">NEXUS AI OPTIMIZER</h2>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Action pour : {aiActionsProduct.name}</p>
+                         </div>
+                      </div>
+                      <button 
+                         onClick={() => setShowAiActionsModal(false)}
+                         className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all active:scale-90"
+                      >
+                         <X className="w-5 h-5" />
+                      </button>
+                   </div>
+ 
+                   {/* Content */}
+                   <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                      {isGeneratingActions ? (
+                         <div className="flex flex-col items-center justify-center py-20 gap-6">
+                            <div className="relative">
+                               <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+                               <Sparkles className="w-4 h-4 text-indigo-400 absolute top-0 right-0 animate-pulse" />
+                            </div>
+                            <div className="text-center space-y-2">
+                               <p className="text-xs font-black text-white uppercase tracking-widest animate-pulse">Exploration des opportunités...</p>
+                               <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest leading-relaxed px-12 text-center">
+                                  Nexus calcule les meilleurs scénarios de sortie d'inventaire
+                               </p>
+                            </div>
+                         </div>
+                      ) : (
+                         <div className="space-y-8">
+                            {aiActionsSummary && (
+                               <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-[2rem]">
+                                  <p className="text-[11px] text-slate-300 leading-relaxed font-medium italic">
+                                     "{aiActionsSummary}"
+                                  </p>
+                               </div>
+                            )}
+
+                            <div className="grid grid-cols-1 gap-4">
+                               {aiActions.map((action, idx) => (
+                                  <motion.div 
+                                     key={idx}
+                                     initial={{ opacity: 0, x: -10 }}
+                                     animate={{ opacity: 1, x: 0 }}
+                                     transition={{ delay: idx * 0.1 }}
+                                     className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl flex items-center justify-between group hover:border-indigo-500/30 transition-all"
+                                  >
+                                     <div className="flex-1 pr-4">
+                                        <h4 className="text-[11px] font-black text-white uppercase tracking-wider mb-1 flex items-center gap-2">
+                                           {action.type === 'RESTOCK' && <Package className="w-3.5 h-3.5 text-blue-400" />}
+                                           {action.type === 'SALE' && <Tag className="w-3.5 h-3.5 text-amber-400" />}
+                                           {action.type === 'PRICE_ADJUST' && <ArrowUpDown className="w-3.5 h-3.5 text-emerald-400" />}
+                                           {action.type === 'BUNDLE' && <Plus className="w-3.5 h-3.5 text-purple-400" />}
+                                           {action.label}
+                                        </h4>
+                                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">{action.description}</p>
+                                     </div>
+                                     <button 
+                                        onClick={() => executeAiAction(action)}
+                                        disabled={!!executingActionId}
+                                        className={`px-6 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                                           executingActionId === action.label 
+                                           ? 'bg-slate-800 text-slate-500' 
+                                           : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/20 active:scale-95'
+                                        }`}
+                                     >
+                                        {executingActionId === action.label ? (
+                                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : <Zap className="w-3.5 h-3.5" />}
+                                        {executingActionId === action.label ? 'Exécution...' : 'Appliquer'}
+                                     </button>
+                                  </motion.div>
+                               ))}
+                            </div>
+
+                            <div className="flex justify-center">
+                               <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest text-center max-w-xs">
+                                  Attention : Ces actions modifient directement vos données sur WooCommerce.
+                               </p>
+                            </div>
+                         </div>
+                      )}
+                   </div>
+                </motion.div>
+             </>
+          )}
+       </AnimatePresence>
     </div>
   );
 }

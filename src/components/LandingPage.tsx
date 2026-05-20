@@ -517,7 +517,7 @@ export default function LandingPage({
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-10">
+          <div className="flex flex-wrap justify-center gap-6 lg:gap-10">
             {plans.length > 0 ? plans.map((plan, idx) => {
               const planId = String(plan.id).toLowerCase();
               const isTrial = planId === 'trial' || plan.price === 0;
@@ -534,9 +534,9 @@ export default function LandingPage({
                   transition={{ delay: idx * 0.1 }}
                   viewport={{ once: true }}
                   className={cn(
-                    "group relative p-[1px] rounded-[3rem] transition-all duration-700 w-full md:w-[calc(50%-1.25rem)] lg:w-[calc(25%-2rem)] max-w-sm",
+                    "group relative p-[1px] rounded-[3rem] transition-all duration-700 w-full md:w-[calc(50%-1.5rem)] lg:w-[calc(25%-2rem)] max-w-sm flex flex-col",
                     isFeatured 
-                      ? "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-[0_30px_100px_-20px_rgba(79,70,229,0.3)] scale-105 z-10" 
+                      ? "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-[0_30px_100px_-20px_rgba(79,70,229,0.3)] lg:scale-105 z-10" 
                       : "bg-white/10 hover:bg-white/20"
                   )}
                 >

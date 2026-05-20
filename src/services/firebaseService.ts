@@ -49,6 +49,16 @@ export const firebaseService = {
     }
   },
 
+  async updateUserProfile(uid: string, data: any) {
+    try {
+      const userRef = doc(db, 'users', uid);
+      await setDoc(userRef, data, { merge: true });
+      return { success: true };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${uid}`);
+    }
+  },
+
   async getAllUsers() {
     try {
       const [usersSnap, subsSnap, plans] = await Promise.all([
@@ -587,6 +597,53 @@ export const firebaseService = {
     } catch (error) {
       console.error('[Firebase] Error getting user offers:', error);
       return [];
+    }
+  },
+
+  // Messages / Inbox
+  async getInboxMessages(email: string) {
+    try {
+      const q = query(
+        collection(db, 'messages'),
+        where('recipient_email', '==', email.toLowerCase()),
+        orderBy('created_at', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        created_at: (doc.data() as any).created_at?.toDate?.()?.toISOString() || (doc.data() as any).created_at
+      }));
+    } catch (error) {
+      console.error('[Firebase] Error getting inbox messages:', error);
+      return [];
+    }
+  },
+
+  async markMessageRead(messageId: string) {
+    try {
+      await setDoc(doc(db, 'messages', messageId), { status: 'read' }, { merge: true });
+      return { success: true };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `messages/${messageId}`);
+    }
+  },
+
+  async archiveMessage(messageId: string, collectionName: string = 'messages') {
+    try {
+      await setDoc(doc(db, collectionName, messageId), { status: 'archived' }, { merge: true });
+      return { success: true };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${collectionName}/${messageId}`);
+    }
+  },
+
+  async deleteMessage(messageId: string, collectionName: string = 'messages') {
+    try {
+      await deleteDoc(doc(db, collectionName, messageId));
+      return { success: true };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${messageId}`);
     }
   }
 };

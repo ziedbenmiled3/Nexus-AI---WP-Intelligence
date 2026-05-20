@@ -12,16 +12,22 @@ export default function Sparkline({ data, width = 200, height = 60, color = "#3b
     return <div className="w-full h-full flex items-center justify-center text-[8px] text-slate-700 font-black uppercase tracking-widest">Calcul...</div>;
   }
 
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
+  // Filter out non-numeric values to prevent NaN crashes
+  const validData = data.filter(v => typeof v === 'number' && !isNaN(v));
+  if (validData.length < 2) {
+    return <div className="w-full h-full flex items-center justify-center text-[8px] text-slate-700 font-black uppercase tracking-widest">Calcul...</div>;
+  }
+
+  const min = Math.min(...validData);
+  const max = Math.max(...validData);
+  const range = (max - min) || 1;
 
   // Use a fixed virtual coordinate system for the path
   const vWidth = 1000;
   const vHeight = 200;
 
-  const points = data.map((val, i) => {
-    const x = (i / (data.length - 1)) * vWidth;
+  const points = validData.map((val, i) => {
+    const x = (i / (validData.length - 1)) * vWidth;
     const y = vHeight - ((val - min) / range) * vHeight;
     return { x, y };
   });

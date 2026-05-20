@@ -257,7 +257,7 @@ export default function AffiliateView({ userEmail }: { userEmail: string }) {
                     <input 
                       type="text"
                       placeholder="FILTRER LES VENTES..."
-                      value={salesSearch}
+                      value={salesSearch || ''}
                       onChange={(e) => setSalesSearch(e.target.value)}
                       className="bg-black/40 border border-slate-800 rounded-lg pl-8 pr-4 py-2 text-[8px] font-black uppercase tracking-widest text-white focus:outline-none focus:border-blue-500 transition-all w-full md:w-64"
                     />
@@ -391,7 +391,7 @@ export default function AffiliateView({ userEmail }: { userEmail: string }) {
                       <div className="flex items-center gap-4">
                         <input 
                           type="number" 
-                          value={comm.percentage}
+                          value={comm.percentage || 0}
                           onChange={(e) => handleUpdateCommission(comm.pack_name, parseInt(e.target.value))}
                           className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xl font-black text-white w-24 focus:outline-none focus:border-blue-500"
                         />
@@ -488,7 +488,7 @@ export default function AffiliateView({ userEmail }: { userEmail: string }) {
                       <input 
                         type="text"
                         placeholder="RECHERCHER AFFILIÉ..."
-                        value={affiliateSearch}
+                        value={affiliateSearch || ''}
                         onChange={(e) => setAffiliateSearch(e.target.value)}
                         className="bg-black/40 border border-slate-800 rounded-lg pl-8 pr-4 py-2 text-[8px] font-black uppercase tracking-widest text-white focus:outline-none focus:border-blue-500 transition-all md:w-48"
                       />

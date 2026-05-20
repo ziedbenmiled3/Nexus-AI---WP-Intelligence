@@ -24,7 +24,11 @@ export const geminiQuery = async (payload: any, customKey?: string): Promise<Gem
       headers['x-gemini-key'] = customKey;
     }
 
-    const res = await api.post('/api/gemini', payload, { headers });
+    // Capture current app language
+    const currentLang = localStorage.getItem('nexus_lang') || 'fr';
+    const payloadWithLang = { ...payload, lang: currentLang };
+
+    const res = await api.post('/api/gemini', payloadWithLang, { headers });
     
     // Normalize response for components that expect axial-like structure or direct fields
     const result: GeminiResponse = {
@@ -630,10 +634,14 @@ export const generateForecast = async (products: any[], orders: any[], currency:
     - actionableInsights: conseils stratégiques (bundles, promos, réapprovisionnement).
     
     DONNÉES DU STOCK :
-    ${JSON.stringify(products.map(p => ({ id: p.id, name: p.name, stock: p.stock_quantity, sales_total: p.total_sales, price: p.price })), null, 1)}
+    ${JSON.stringify((Array.isArray(products) ? products : []).map(p => ({ id: p.id, name: p.name, stock: p.stock_quantity, sales_total: p.total_sales, price: p.price })), null, 1)}
     
     COMMANDES RÉCENTES (vitesse de vente) :
-    ${JSON.stringify(orders.slice(0, 10).map(o => ({ date: o.date_created, total: o.total, items: o.line_items.map((i: any) => i.product_id) })), null, 1)}
+    ${JSON.stringify((Array.isArray(orders) ? orders : []).slice(0, 10).map(o => ({ 
+      date: o.date_created, 
+      total: o.total, 
+      items: (Array.isArray(o.line_items) ? o.line_items : []).map((i: any) => i.product_id) 
+    })), null, 1)}
     
     Monnaie : ${currency}`;
 
@@ -703,4 +711,58 @@ export const testGeminiConnection = async (apiKey: string) => {
     model: "gemini-3-flash-preview",
     prompt: "Hello, respond with 'Connected'.",
   }, apiKey);
+};
+
+export const suggestStockActions = async (product: any, currency: string, customKey?: string) => {
+  const prompt = `Analyses l'état des stocks d'un produit spécifique et suggères 3 à 4 actions rapides concrètes.
+    
+    PRODUIT :
+    - Nom : ${product.name}
+    - SKU : ${product.sku || 'N/A'}
+    - Prix actuel : ${product.price} ${currency}
+    - Prix régulier : ${product.regular_price} ${currency}
+    - Stock actuel : ${product.stock_quantity ?? 0}
+    - Statut : ${product.stock_status}
+    - Seuil de stock bas : ${product.low_stock_amount || 5}
+    - Catégories : ${product.categories?.map((c: any) => c.name).join(', ')}
+    
+    INSTRUCTIONS :
+    1. Si le stock est bas ou nul, suggère "Réapprovisionner de X unités" (choisis un X réaliste comme 50, 100, etc.).
+    2. Si le stock est élevé mais que le produit semble stagner, suggère une "Vente Flash" ou un "Bundle".
+    3. Pour chaque action, fournis :
+       - label : Un titre court et percutant (ex: "Réapprovisionner 50 unités").
+       - description : Une explication rapide de l'intérêt stratégique.
+       - type : "RESTOCK" | "SALE" | "BUNDLE" | "PRICE_ADJUST"
+       - value : Une valeur numérique associée si applicable (ex: 50 pour restock, 20 pour -20% de remise).
+    
+    Retournes-moi un JSON.`;
+
+  const data = await callAiProxy({
+    model: "gemini-3-flash-preview",
+    prompt,
+    systemInstruction: "Tu es un expert en logistique et pricing e-commerce spécialisé dans l'optimisation des flux de stock.",
+    responseMimeType: "application/json",
+    responseSchema: {
+      type: "object",
+      properties: {
+        suggestions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              description: { type: "string" },
+              type: { type: "string", enum: ["RESTOCK", "SALE", "BUNDLE", "PRICE_ADJUST"] },
+              value: { type: "number" }
+            },
+            required: ["label", "description", "type"]
+          }
+        },
+        analysisSummary: { type: "string" }
+      },
+      required: ["suggestions", "analysisSummary"]
+    }
+  }, customKey);
+
+  return safeJsonParse(cleanJsonResponse(data.text), { suggestions: [], analysisSummary: '' });
 };

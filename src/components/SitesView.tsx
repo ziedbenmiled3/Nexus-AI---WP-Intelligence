@@ -599,7 +599,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                       required
                       placeholder="https://votre-site.com"
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white outline-none focus:border-blue-500 transition-all"
-                      value={newSite.url}
+                      value={newSite.url || ''}
                       onChange={e => setNewSite({...newSite, url: e.target.value})}
                     />
                   </div>
@@ -612,7 +612,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                           required
                           placeholder="admin"
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white outline-none focus:border-blue-500 transition-all"
-                          value={newSite.username}
+                          value={newSite.username || ''}
                           onChange={e => setNewSite({...newSite, username: e.target.value})}
                         />
                       </div>
@@ -623,7 +623,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                           type="password"
                           placeholder="•••• •••• •••• ••••"
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white outline-none focus:border-blue-500 transition-all"
-                          value={newSite.password}
+                          value={newSite.password || ''}
                           onChange={e => setNewSite({...newSite, password: e.target.value})}
                         />
                       </div>
@@ -636,7 +636,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                           required
                           placeholder="ck_..."
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white outline-none focus:border-blue-500 transition-all"
-                          value={newSite.consumerKey}
+                          value={newSite.consumerKey || ''}
                           onChange={e => setNewSite({...newSite, consumerKey: e.target.value})}
                         />
                       </div>
@@ -647,7 +647,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                           type="password"
                           placeholder="cs_..."
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white outline-none focus:border-blue-500 transition-all"
-                          value={newSite.consumerSecret}
+                          value={newSite.consumerSecret || ''}
                           onChange={e => setNewSite({...newSite, consumerSecret: e.target.value})}
                         />
                       </div>
@@ -661,7 +661,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                     <input 
                       placeholder="Entrez votre clé API Gemini personnelle"
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black outline-none focus:border-blue-500 transition-all text-blue-400"
-                      value={newSite.geminiApiKey}
+                      value={newSite.geminiApiKey || ''}
                       onChange={e => setNewSite({...newSite, geminiApiKey: e.target.value})}
                     />
                     <button 
@@ -885,7 +885,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                       <input 
                         required
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white focus:border-blue-500 transition-all outline-none"
-                        value={editSiteData.url}
+                        value={editSiteData.url || ''}
                         onChange={e => setEditSiteData({...editSiteData, url: e.target.value})}
                       />
                    </div>
@@ -896,7 +896,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                            <input 
                              required
                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white focus:border-blue-500 transition-all outline-none"
-                             value={editSiteData.username}
+                             value={editSiteData.username || ''}
                              onChange={e => setEditSiteData({...editSiteData, username: e.target.value})}
                            />
                         </div>
@@ -907,7 +907,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                              type="password"
                              placeholder="•••• •••• •••• ••••"
                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white focus:border-blue-500 transition-all outline-none"
-                             value={editSiteData.password}
+                             value={editSiteData.password || ''}
                              onChange={e => setEditSiteData({...editSiteData, password: e.target.value})}
                            />
                         </div>
@@ -920,7 +920,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                              required
                              placeholder="ck_..."
                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white focus:border-blue-500 transition-all outline-none"
-                             value={editSiteData.consumerKey}
+                             value={editSiteData.consumerKey || ''}
                              onChange={e => setEditSiteData({...editSiteData, consumerKey: e.target.value})}
                            />
                         </div>
@@ -931,7 +931,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                              type="password"
                              placeholder="cs_..."
                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black text-white focus:border-blue-500 transition-all outline-none"
-                             value={editSiteData.consumerSecret}
+                             value={editSiteData.consumerSecret || ''}
                              onChange={e => setEditSiteData({...editSiteData, consumerSecret: e.target.value})}
                            />
                         </div>
@@ -956,7 +956,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                             "w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-sm font-black focus:border-blue-500 transition-all outline-none",
                             isAdminUser ? "text-emerald-500/50 italic" : "text-blue-400"
                           )}
-                         value={editSiteData.geminiApiKey}
+                         value={editSiteData.geminiApiKey || ''}
                          onChange={e => setEditSiteData({...editSiteData, geminiApiKey: e.target.value})}
                        />
                        <button 

@@ -71,10 +71,12 @@ export default function ForecastView({ config }: Props) {
     }
   };
 
-  const runForecast = async (pData: any[], oData: any[]) => {
+  const runForecast = async (pData: any, oData: any) => {
     setIsForecasting(true);
     try {
-      const res = await generateForecast(pData, oData, currency, config.geminiApiKey);
+      const safeP = Array.isArray(pData) ? pData : [];
+      const safeO = Array.isArray(oData) ? oData : [];
+      const res = await generateForecast(safeP, safeO, currency, config.geminiApiKey);
       setForecast(res);
     } catch (err) {
       console.error('Forecast generation failed', err);

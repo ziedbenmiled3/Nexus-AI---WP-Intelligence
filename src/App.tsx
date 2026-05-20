@@ -41,7 +41,9 @@ import {
   Mail,
   Link as LinkIcon,
   Database,
-  BarChart3
+  BarChart3,
+  Menu,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -80,6 +82,8 @@ import PaymentScreen from './components/PaymentScreen';
 import RegistrationSuccess from './components/RegistrationSuccess';
 import InvitePage from './components/InvitePage';
 import AIChatSupport from './components/AIChatSupport';
+import { EbookPromotion } from './components/EbookPromotion';
+import MandatoryProfileForm from './components/MandatoryProfileForm';
 
 import { useTranslation } from 'react-i18next';
 
@@ -115,6 +119,9 @@ export default function App() {
   const [settings, setSettings] = useState<any>({});
   const [sites, setSites] = useState<any[]>([]);
   const [isLoadingSites, setIsLoadingSites] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isProfileComplete, setIsProfileComplete] = useState<boolean>(true);
 
   // Real-time plans and settings fetch
   useEffect(() => {
@@ -195,11 +202,31 @@ export default function App() {
             console.warn('[App] Seeding skipped:', seedErr);
           }
           
-          // 1. Fetch all sites and subscription from cloud for this email
-          const [sitesResult, subData] = await Promise.all([
+          // 1. Fetch all sites, subscription, and user profile from cloud
+          const [sitesResult, subData, profile] = await Promise.all([
             firebaseService.getSites(email),
-            firebaseService.getSubscription(email)
+            firebaseService.getSubscription(email),
+            firebaseService.getUserProfile(user.uid)
           ]);
+          
+          const userProfileData = profile as any;
+          setUserProfile(userProfileData);
+          if (userProfileData) {
+            const isCompleted = !!(
+              userProfileData.username && 
+              userProfileData.first_name && 
+              userProfileData.last_name && 
+              userProfileData.birth_date && 
+              userProfileData.address && 
+              userProfileData.zip_code && 
+              userProfileData.country && 
+              userProfileData.phone && 
+              userProfileData.company
+            );
+            setIsProfileComplete(isCompleted);
+          } else {
+            setIsProfileComplete(false);
+          }
           
           let cloudSites: any[] = [];
           
@@ -626,6 +653,21 @@ export default function App() {
     );
   }
 
+  // Mandatory profile coordinates check if authenticated
+  if (user && !isProfileComplete) {
+    return (
+      <MandatoryProfileForm 
+        user={user}
+        initialProfile={userProfile}
+        onSaved={(updatedProfile) => {
+          setUserProfile(updatedProfile);
+          setIsProfileComplete(true);
+        }}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   if (!user && !userEmail && !isSuperAdmin) {
     // If not logged in at all, show landing or login
     if (showLanding) return <LandingPage onSelectPlan={handleSelectPlan} lang={lang} onLangChange={handleLangChange} externalPlans={plans} />;
@@ -716,8 +758,105 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden font-sans text-slate-200">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-950 flex flex-col">
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Drawer */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed inset-y-0 left-0 w-72 bg-slate-950 border-r border-slate-800 z-[101] lg:hidden flex flex-col"
+          >
+            <div className="p-6 flex items-center justify-between">
+              <button 
+                onClick={handleLogoClick}
+                className="flex items-center gap-3"
+              >
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-xl shadow-blue-950/40">
+                  <Zap className="w-6 h-6 text-white fill-white shadow-sm" />
+                </div>
+                <div>
+                  <h1 className="text-sm font-black tracking-[0.15em] text-white uppercase leading-tight">Nexus AI</h1>
+                  <p className="text-[8px] font-bold text-blue-400/80 uppercase tracking-widest">WP Intelligence</p>
+                </div>
+              </button>
+              <button 
+                onClick={() => setIsSidebarOpen(false)}
+                className="p-2 text-slate-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <nav className="flex-1 px-4 py-4 space-y-8 overflow-y-auto custom-scrollbar">
+              {/* Reuse the same nav logic but with close on click */}
+              <div className="space-y-1">
+                <h3 className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Nexus Cloud</h3>
+                {adminTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                      activeTab === tab.id ? "bg-blue-600/10 text-blue-400 border border-blue-500/20" : "text-slate-500 hover:bg-slate-900/50"
+                    )}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    <span className="text-xs font-black uppercase tracking-widest">{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {filteredGroupedTabs.map((group, idx) => (
+                <div key={idx} className="space-y-1">
+                  <h3 className="px-4 text-[9px] font-black text-slate-600 uppercase tracking-[0.4em] mb-4 opacity-50">{group.category}</h3>
+                  {group.items.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all",
+                        activeTab === tab.id ? "bg-blue-600/10 text-blue-400 border border-blue-500/20" : "text-slate-500 hover:bg-slate-900/50"
+                      )}
+                    >
+                      <tab.icon className="w-4 h-4" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </nav>
+
+            <div className="px-4 py-2">
+               <EbookPromotion />
+            </div>
+
+            <div className="p-4 border-t border-white/5">
+               <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-4 rounded-xl text-red-500 hover:bg-red-500/10 transition-all font-black uppercase tracking-widest text-xs">
+                  <LogOut className="w-4 h-4" />
+                  Sortie
+               </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar */}
+      <aside className="w-64 border-r border-slate-800 bg-slate-950 hidden lg:flex flex-col">
         <div className="p-6">
           <button 
             onClick={handleLogoClick}
@@ -790,6 +929,8 @@ export default function App() {
         </nav>
 
         <div className="p-4 mt-auto space-y-4">
+           <EbookPromotion />
+           
            {/* Language Switcher */}
            <div className="flex bg-slate-950/80 border border-white/5 rounded-2xl p-1 shadow-2xl relative z-10 backdrop-blur-md">
               <button 
@@ -858,9 +999,17 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto relative flex flex-col bg-black custom-scrollbar">
         {/* Header Section indicators */}
-        <div className="px-8 pt-8 flex items-center justify-between border-b border-slate-900 pb-4 mx-8 mt-2 relative z-[60]">
-           <div className="flex items-center gap-12">
-              <div className="flex flex-col">
+        <div className="px-4 md:px-8 pt-4 md:pt-8 flex items-center justify-between border-b border-slate-900 pb-4 mx-4 md:mx-8 mt-2 relative z-[60]">
+           <div className="flex items-center gap-4 md:gap-12">
+              {/* Burger Menu Button */}
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2 bg-slate-900 border border-slate-800 rounded-xl text-white"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+
+              <div className="flex flex-col hidden sm:flex">
                  <span className="text-[7px] font-black text-slate-600 uppercase tracking-[0.3em] mb-1">Platform Status</span>
                  <div className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
@@ -874,17 +1023,17 @@ export default function App() {
               </div>
            </div>
 
-           <div className="flex items-center gap-4">
+           <div className="flex items-center gap-2 md:gap-4">
               <button 
                 onClick={() => setActiveTab('sites')}
-                className="flex items-center gap-3 px-6 py-2.5 bg-slate-900 border border-slate-800 hover:border-blue-500/50 rounded-2xl transition-all group"
+                className="flex items-center gap-2 md:gap-3 px-3 md:px-6 py-2 md:py-2.5 bg-slate-900 border border-slate-800 hover:border-blue-500/50 rounded-2xl transition-all group"
               >
                  <div className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] group-hover:animate-ping" />
-                 <div className="flex flex-col items-start leading-none">
+                 <div className="flex flex-col items-start leading-none max-w-[80px] md:max-w-none">
                     <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Site Actif</span>
-                    <span className="text-[10px] font-black text-white uppercase tracking-tighter">{config?.url?.replace('https://', '').replace(/\/$/, '') || 'Nexus'}</span>
+                    <span className="text-[10px] font-black text-white uppercase tracking-tighter truncate">{config?.url?.replace('https://', '').replace(/\/$/, '') || 'Nexus'}</span>
                  </div>
-                 <ChevronRight className="w-3 h-3 text-slate-600 group-hover:text-blue-500 transition-colors ml-2" />
+                 <ChevronRight className="w-3 h-3 text-slate-600 group-hover:text-blue-500 transition-colors ml-1 md:ml-2" />
               </button>
            </div>
         </div>

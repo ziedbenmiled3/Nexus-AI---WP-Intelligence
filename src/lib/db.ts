@@ -58,6 +58,17 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS imap_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_email TEXT NOT NULL UNIQUE,
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    secure INTEGER DEFAULT 1,
+    auth_user TEXT NOT NULL,
+    auth_pass TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS email_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_email TEXT NOT NULL, -- 'admin' for system templates
@@ -65,6 +76,8 @@ db.exec(`
     subject TEXT NOT NULL,
     body_html TEXT NOT NULL,
     category TEXT DEFAULT 'general', -- 'saas' or 'woo'
+    brand_color TEXT DEFAULT '#00ff66',
+    accent_color TEXT DEFAULT '#000000',
     is_ai_generated INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );

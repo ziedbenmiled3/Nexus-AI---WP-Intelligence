@@ -368,7 +368,7 @@ export default function SuperAdminView({
                 </div>
                 <input 
                   type={showKey ? "text" : "password"}
-                  value={geminiMasterKey}
+                  value={geminiMasterKey || ''}
                   onChange={(e) => setGeminiMasterKey(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-2xl pl-12 pr-24 py-5 text-[11px] font-mono text-blue-400 focus:border-blue-500 transition-all outline-none"
                   placeholder="AIzaSy..."
@@ -495,7 +495,7 @@ export default function SuperAdminView({
               <div className="flex gap-4">
                 <input 
                   type="password"
-                  value={paypalClientId}
+                  value={paypalClientId || ''}
                   onChange={(e) => setPaypalClientId(e.target.value)}
                   className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-4 text-[11px] font-mono text-white focus:border-blue-500 transition-all outline-none"
                   placeholder="AbC123..."
@@ -601,7 +601,7 @@ export default function SuperAdminView({
                 <div className="relative flex-1">
                   <input 
                     type="number"
-                    value={annualDiscount}
+                    value={annualDiscount || ''}
                     onChange={(e) => setAnnualDiscount(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-4 text-[11px] font-mono text-white focus:border-amber-500 transition-all outline-none"
                     placeholder="20"
@@ -787,7 +787,7 @@ export default function SuperAdminView({
                       <div className="space-y-2">
                         <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">ID Technique (NEXUS_ID)</label>
                         <input 
-                          value={editingPlan.id}
+                          value={editingPlan.id || ''}
                           onChange={e => setEditingPlan({...editingPlan, id: e.target.value})}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white"
                           placeholder="ex: starter"
@@ -797,7 +797,7 @@ export default function SuperAdminView({
                       <div className="space-y-2">
                         <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Nom Public</label>
                         <input 
-                          value={editingPlan.name}
+                          value={editingPlan.name || ''}
                           onChange={e => setEditingPlan({...editingPlan, name: e.target.value})}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white"
                           placeholder="Pack Vision"
@@ -812,7 +812,7 @@ export default function SuperAdminView({
                           <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Prix ($)</label>
                           <input 
                             type="number"
-                            value={editingPlan.price}
+                            value={editingPlan.price || 0}
                             onChange={e => setEditingPlan({...editingPlan, price: e.target.value})}
                             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white"
                             required
@@ -822,7 +822,7 @@ export default function SuperAdminView({
                           <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Sites Limite</label>
                           <input 
                             type="number"
-                            value={editingPlan.site_limit}
+                            value={editingPlan.site_limit || 0}
                             onChange={e => setEditingPlan({...editingPlan, site_limit: e.target.value})}
                             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white"
                             required
@@ -958,7 +958,7 @@ Feature 2"
                   <input 
                     type="text"
                     placeholder="RECHERCHER CLIENT..."
-                    value={customerSearch}
+                    value={customerSearch || ''}
                     onChange={(e) => setCustomerSearch(e.target.value)}
                     className="bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-4 py-2 text-[8px] font-black uppercase tracking-widest text-white focus:outline-none focus:border-blue-500 transition-all w-48"
                   />
@@ -1076,7 +1076,7 @@ Feature 2"
                    <div className="space-y-2">
                       <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Sélectionner le Pack à offrir</label>
                       <select 
-                        value={giftPlanId}
+                        value={giftPlanId || ''}
                         onChange={(e) => setGiftPlanId(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-4 text-xs text-white focus:border-amber-500 transition-all outline-none"
                       >
@@ -1121,7 +1121,7 @@ Feature 2"
                    <div className="space-y-2">
                       <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Titre de l'Offre</label>
                       <input 
-                        value={offerData.title}
+                        value={offerData.title || ''}
                         onChange={(e) => setOfferData({...offerData, title: e.target.value})}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-4 text-xs text-white placeholder:text-slate-700"
                         placeholder="Ex: -70% sur votre prochain Renouvellement"
@@ -1130,7 +1130,7 @@ Feature 2"
                    <div className="space-y-2">
                       <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Contenu / Message</label>
                       <textarea 
-                        value={offerData.content}
+                        value={offerData.content || ''}
                         onChange={(e) => setOfferData({...offerData, content: e.target.value})}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-4 text-xs text-white h-32 placeholder:text-slate-700"
                         placeholder="Détails de l'offre et code promo..."

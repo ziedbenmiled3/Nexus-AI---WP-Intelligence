@@ -152,6 +152,22 @@
         "icon": { "type": "string" }
       },
       "required": ["id", "name", "price"]
+    },
+    "message": {
+      "title": "Message",
+      "description": "In-app communication messages",
+      "type": "object",
+      "properties": {
+        "sender_email": { "type": "string" },
+        "sender_name": { "type": "string" },
+        "recipient_email": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "status": { "type": "string", "enum": ["unread", "read", "archived"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "site_url": { "type": "string" }
+      },
+      "required": ["sender_email", "recipient_email", "subject", "body"]
     }
   },
   "firestore": {
@@ -198,6 +214,10 @@
     "/user_offers/{offerId}": {
       "schema": "user_offer",
       "description": "Special offers sent to users"
+    },
+    "/messages/{messageId}": {
+      "schema": "message",
+      "description": "Customer communication messages"
     }
   }
 }

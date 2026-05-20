@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
+   Zap,
    Package, 
    Search, 
    RefreshCw,
@@ -26,7 +27,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { WPConfig } from '../types';
 import { wpFetch } from '../lib/wordpress';
-import { geminiQuery } from '../lib/gemini';
+import { geminiQuery, suggestStockActions } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
@@ -51,6 +52,14 @@ export default function StockAnalysisView({ config }: Props) {
   const [aiAdvice, setAiAdvice] = useState<string>("");
   const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
   const [showAdviceModal, setShowAdviceModal] = useState(false);
+  
+  // AI Stock Actions States
+  const [showAiActionsModal, setShowAiActionsModal] = useState(false);
+  const [aiActionsProduct, setAiActionsProduct] = useState<any | null>(null);
+  const [isGeneratingActions, setIsGeneratingActions] = useState(false);
+  const [aiActions, setAiActions] = useState<any[]>([]);
+  const [aiActionsSummary, setAiActionsSummary] = useState("");
+  const [executingActionId, setExecutingActionId] = useState<string | null>(null);
   
   // Filters
   const [search, setSearch] = useState('');
@@ -171,11 +180,81 @@ export default function StockAnalysisView({ config }: Props) {
        setProducts(prev => prev.map(p => 
           p.id === product.id ? { ...p, stock_quantity: newQuantity, stock_status: newQuantity > 0 ? 'instock' : 'outofstock' } : p
        ));
+       return true;
     } catch (err: any) {
        console.error("Failed to update stock:", err);
        alert("Erreur lors de la mise à jour du stock.");
+       return false;
     } finally {
        setUpdatingId(null);
+    }
+  };
+
+  const handleStockStatusClick = async (product: any) => {
+    setAiActionsProduct(product);
+    setShowAiActionsModal(true);
+    setIsGeneratingActions(true);
+    setAiActions([]);
+    setAiActionsSummary("");
+
+    try {
+      const result = await suggestStockActions(product, currency, config.geminiApiKey);
+      setAiActions(result.suggestions || []);
+      setAiActionsSummary(result.analysisSummary || "");
+    } catch (err) {
+      console.error("AI Actions Error:", err);
+      setAiActionsSummary("Impossible de générer des suggestions pour le moment.");
+    } finally {
+      setIsGeneratingActions(false);
+    }
+  };
+
+  const executeAiAction = async (action: any) => {
+    if (!aiActionsProduct) return;
+    setExecutingActionId(action.label);
+
+    try {
+      if (action.type === 'RESTOCK') {
+        const success = await handleQuickStockUpdate(aiActionsProduct, action.value || 50);
+        if (success) {
+          alert(`Succès : ${action.label} appliqué !`);
+          setShowAiActionsModal(false);
+        }
+      } else if (action.type === 'SALE' || action.type === 'PRICE_ADJUST') {
+        setUpdatingId(aiActionsProduct.id);
+        const regularPrice = parseFloat(aiActionsProduct.regular_price || aiActionsProduct.price);
+        let salePrice = regularPrice;
+        
+        if (action.type === 'SALE') {
+          // Assuming value is percentage discount
+          salePrice = regularPrice * (1 - (action.value || 15) / 100);
+        } else {
+          // Adjust price directly
+          salePrice = action.value || regularPrice;
+        }
+
+        const finalSalePrice = Math.round(salePrice * 100) / 100;
+
+        await wpFetch(config, `/wc/v3/products/${aiActionsProduct.id}`, 'PUT', {
+          sale_price: finalSalePrice.toString(),
+          on_sale: true
+        });
+
+        setProducts(prev => prev.map(p => 
+          p.id === aiActionsProduct.id ? { ...p, sale_price: finalSalePrice.toString(), price: finalSalePrice.toString(), on_sale: true } : p
+        ));
+        
+        alert(`Succès : ${action.label} appliqué !`);
+        setShowAiActionsModal(false);
+      } else {
+        alert("Action complexe : Veuillez l'appliquer manuellement dans WooCommerce.");
+      }
+    } catch (err) {
+      console.error("Execute AI Action Error:", err);
+      alert("Échec de l'action AI.");
+    } finally {
+      setExecutingActionId(null);
+      setUpdatingId(null);
     }
   };
 
@@ -541,12 +620,14 @@ Réponds en français, avec un ton professionnel, analytique et encourageant. Ut
                                     ) : product.manage_stock === false ? (
                                        <span className="text-[11px] font-black text-emerald-500 uppercase">GÉRÉ PAR WP</span>
                                     ) : (
-                                       <span className={`text-[11px] font-black ${
-                                          product.stock_status === 'outofstock' ? 'text-red-500' : 
-                                          (product.stock_quantity <= (product.low_stock_amount || 5)) ? 'text-amber-500' : 'text-emerald-500'
+                                       <button 
+                                          onClick={() => handleStockStatusClick(product)}
+                                          className={`text-[11px] font-black px-2 py-0.5 rounded-lg transition-all hover:scale-105 active:scale-95 ${
+                                          product.stock_status === 'outofstock' ? 'text-red-500 bg-red-500/10 border border-red-500/20 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 
+                                          (product.stock_quantity <= (product.low_stock_amount || 5)) ? 'text-amber-500 bg-amber-500/10 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40'
                                        }`}>
-                                          {product.stock_status === 'outofstock' ? '0 UNITS' : `${product.stock_quantity ?? 0} UNITS`}
-                                       </span>
+                                          {product.stock_status === 'outofstock' ? 'Rupture AI' : `${product.stock_quantity ?? 0} UNITS (AI)`}
+                                       </button>
                                     )}
                                     <span className="text-[8px] font-black text-slate-600 uppercase">Min: {product.low_stock_amount || 5}</span>
                                  </div>
@@ -773,6 +854,117 @@ Réponds en français, avec un ton professionnel, analytique et encourageant. Ut
             </>
          )}
       </AnimatePresence>
+
+      {/* AI Stock Actions Modal */}
+      <AnimatePresence>
+         {showAiActionsModal && aiActionsProduct && (
+            <>
+               <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowAiActionsModal(false)}
+                  className="fixed inset-0 bg-black/80 backdrop-blur-md z-[120]"
+               />
+               <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xl max-h-[85vh] bg-[#0d0f14] border border-slate-800 z-[121] shadow-2xl rounded-[3rem] overflow-hidden flex flex-col"
+               >
+                  {/* Header */}
+                  <div className="p-8 border-b border-slate-800 flex items-center justify-between bg-slate-900/10">
+                     <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                           <Zap className="w-6 h-6 text-indigo-400" />
+                         </div>
+                         <div>
+                            <h2 className="text-lg font-black text-white uppercase tracking-widest">NEXUS Stock Optimizer</h2>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Actions IA : {aiActionsProduct.name}</p>
+                         </div>
+                      </div>
+                      <button 
+                         onClick={() => setShowAiActionsModal(false)}
+                         className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all active:scale-90"
+                      >
+                         <X className="w-5 h-5" />
+                      </button>
+                   </div>
+ 
+                   {/* Content */}
+                   <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                      {isGeneratingActions ? (
+                         <div className="flex flex-col items-center justify-center py-20 gap-6">
+                            <div className="relative">
+                               <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+                               <Sparkles className="w-4 h-4 text-indigo-400 absolute top-0 right-0 animate-pulse" />
+                            </div>
+                            <div className="text-center space-y-2">
+                               <p className="text-xs font-black text-white uppercase tracking-widest animate-pulse">Génération de stratégies IA...</p>
+                               <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest leading-relaxed px-12">
+                                  Analyse de la vitesse de vente, du stock résiduel et de l'élasticité prix
+                               </p>
+                            </div>
+                         </div>
+                      ) : (
+                         <div className="space-y-8">
+                            {aiActionsSummary && (
+                               <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-[2rem]">
+                                  <p className="text-[11px] text-slate-300 leading-relaxed font-medium italic">
+                                     "{aiActionsSummary}"
+                                  </p>
+                               </div>
+                            )}
+
+                            <div className="grid grid-cols-1 gap-4">
+                               {aiActions.map((action, idx) => (
+                                  <motion.div 
+                                     key={idx}
+                                     initial={{ opacity: 0, x: -10 }}
+                                     animate={{ opacity: 1, x: 0 }}
+                                     transition={{ delay: idx * 0.1 }}
+                                     className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl flex items-center justify-between group hover:border-indigo-500/30 transition-all"
+                                  >
+                                     <div className="flex-1 pr-4">
+                                        <h4 className="text-[11px] font-black text-white uppercase tracking-wider mb-1 flex items-center gap-2">
+                                           {action.type === 'RESTOCK' && <Package className="w-3.5 h-3.5 text-blue-400" />}
+                                           {action.type === 'SALE' && <Tag className="w-3.5 h-3.5 text-amber-400" />}
+                                           {action.type === 'PRICE_ADJUST' && <ArrowUpDown className="w-3.5 h-3.5 text-emerald-400" />}
+                                           {action.type === 'BUNDLE' && <Plus className="w-3.5 h-3.5 text-purple-400" />}
+                                           {action.label}
+                                        </h4>
+                                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">{action.description}</p>
+                                     </div>
+                                     <button 
+                                        onClick={() => executeAiAction(action)}
+                                        disabled={!!executingActionId}
+                                        className={`px-6 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                                           executingActionId === action.label 
+                                           ? 'bg-slate-800 text-slate-500' 
+                                           : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/20 active:scale-95'
+                                        }`}
+                                     >
+                                        {executingActionId === action.label ? (
+                                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : <Zap className="w-3.5 h-3.5" />}
+                                        {executingActionId === action.label ? 'Exécution...' : 'Appliquer'}
+                                     </button>
+                                  </motion.div>
+                               ))}
+                            </div>
+
+                            <div className="flex justify-center">
+                               <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest text-center max-w-xs">
+                                  Nexus AI utilise des modèles prédictifs. Vérifiez toujours les marges avant d'appliquer une promotion massive.
+                               </p>
+                            </div>
+                         </div>
+                      )}
+                   </div>
+                </motion.div>
+             </>
+          )}
+       </AnimatePresence>
 
       {/* AI Advice Modal */}
       <AnimatePresence>
