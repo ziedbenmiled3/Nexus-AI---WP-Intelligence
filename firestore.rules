@@ -192,6 +192,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Mailing Lists
+    match /mailing_lists/{listId} {
+      allow read, list, get: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      allow create: if isAdmin() || (isSignedIn() && isAuthEmail(incoming().user_email));
+      allow update, delete: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email));
+    }
+
     // Profiles Users
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();

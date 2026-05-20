@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.52.0",
+    "@google/generative-ai": "^0.24.1",
     "@paypal/react-paypal-js": "^9.2.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",

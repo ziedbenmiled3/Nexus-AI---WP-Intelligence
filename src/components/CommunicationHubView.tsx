@@ -154,6 +154,11 @@ export default function CommunicationHubView() {
   // Analytics State
   const [analytics, setAnalytics] = useState<any[]>([]);
 
+  // Deletion Confirmation States (No-Prompt Safety)
+  const [deletingTemplateId, setDeletingTemplateId] = useState<number | null>(null);
+  const [deletingRuleId, setDeletingRuleId] = useState<number | null>(null);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user?.email) return;
 
@@ -339,6 +344,62 @@ export default function CommunicationHubView() {
     } catch (err) { alert('Erreur lors de la sauvegarde.'); }
   };
 
+  const isValidHex = (colorString: string) => {
+    return /^#[0-9a-fA-F]{6}$/i.test(colorString) || /^#[0-9a-fA-F]{3}$/i.test(colorString);
+  };
+
+  const handleBrandColorChange = (newColor: string) => {
+    const oldColor = formTemplate.brand_color;
+    let newHtml = formTemplate.body_html || '';
+    
+    if (isValidHex(oldColor) && isValidHex(newColor) && oldColor.toLowerCase() !== newColor.toLowerCase()) {
+      try {
+        const escapedOld = oldColor.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(escapedOld, 'gi');
+        newHtml = newHtml.replace(regex, newColor);
+      } catch (e) {
+        console.error('Error replacing brand color:', e);
+      }
+    }
+    
+    setFormTemplate(prev => ({
+      ...prev,
+      brand_color: newColor,
+      body_html: newHtml
+    }));
+  };
+
+  const handleAccentColorChange = (newColor: string) => {
+    const oldColor = formTemplate.accent_color;
+    let newHtml = formTemplate.body_html || '';
+    
+    if (isValidHex(oldColor) && isValidHex(newColor) && oldColor.toLowerCase() !== newColor.toLowerCase()) {
+      try {
+        const escapedOld = oldColor.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(escapedOld, 'gi');
+        newHtml = newHtml.replace(regex, newColor);
+      } catch (e) {
+        console.error('Error replacing accent color:', e);
+      }
+    }
+    
+    setFormTemplate(prev => ({
+      ...prev,
+      accent_color: newColor,
+      body_html: newHtml
+    }));
+  };
+
+  const getPreviewHtml = () => {
+    let html = formTemplate.body_html || '<p style="color: #999">Aucun contenu à prévisualiser...</p>';
+    
+    html = html.replace(/\{\{brand_color\}\}/gi, formTemplate.brand_color || '#00ff66');
+    html = html.replace(/\{\{primary_color\}\}/gi, formTemplate.brand_color || '#00ff66');
+    html = html.replace(/\{\{accent_color\}\}/gi, formTemplate.accent_color || '#000000');
+    
+    return html;
+  };
+
   const handleOpenCreateModal = () => {
     setEditingTemplate(null);
     setFormTemplate({ name: '', subject: '', body_html: '', brand_color: '#00ff66', accent_color: '#000000' });
@@ -391,9 +452,13 @@ export default function CommunicationHubView() {
   };
 
   const handleDeleteTemplate = async (id: number) => {
-    if (!confirm('Supprimer cette template ?')) return;
+    if (deletingTemplateId !== id) {
+      setDeletingTemplateId(id);
+      return;
+    }
     try {
       await axios.delete(`/api/comm/templates/${id}`, { headers: { 'x-user-email': user?.email } });
+      setDeletingTemplateId(null);
       fetchTemplates();
     } catch (err: any) { 
       console.error('Delete template error:', err);
@@ -428,9 +493,13 @@ export default function CommunicationHubView() {
   };
 
   const handleDeleteRule = async (id: number) => {
-    if (!confirm('Supprimer cette règle ?')) return;
+    if (deletingRuleId !== id) {
+      setDeletingRuleId(id);
+      return;
+    }
     try {
       await axios.delete(`/api/comm/rules/${id}`, { headers: { 'x-user-email': user?.email } });
+      setDeletingRuleId(null);
       fetchRules();
     } catch (err) { alert('Erreur lors de la suppression.'); }
   };
@@ -454,10 +523,14 @@ export default function CommunicationHubView() {
 
   const handleDeleteMessage = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Supprimer ce message ?')) return;
+    if (deletingMessageId !== id) {
+      setDeletingMessageId(id);
+      return;
+    }
     try {
       const collectionName = activeFolder === 'sent' ? 'sent_messages' : 'messages';
       await firebaseService.deleteMessage(id, collectionName);
+      setDeletingMessageId(null);
       if (selectedMessage?.id === id) setSelectedMessage(null);
     } catch (err: any) {
       console.error('Delete error:', err);
@@ -650,10 +723,10 @@ export default function CommunicationHubView() {
 
                        <button 
                          onClick={(e) => handleDeleteMessage(msg.id, e)}
-                         className="absolute top-1/2 -translate-y-1/2 right-4 p-3 opacity-0 group-hover:opacity-100 transition-all bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl z-20"
-                         title="Supprimer"
+                         className={cn("absolute top-1/2 -translate-y-1/2 right-4 transition-all z-20 text-[8px] font-black uppercase flex items-center justify-center gap-1 rounded-xl", deletingMessageId === msg.id ? "bg-red-600 text-white animate-pulse px-3.5 py-2.5 opacity-100" : "p-3 opacity-0 group-hover:opacity-100 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white")}
+                         title={deletingMessageId === msg.id ? "Confirmer la suppression" : "Supprimer"}
                        >
-                         <Trash2 className="w-3.5 h-3.5" />
+                         {deletingMessageId === msg.id ? "Sûr ?" : <Trash2 className="w-3.5 h-3.5" />}
                        </button>
                     </div>
                   ))}
@@ -689,9 +762,10 @@ export default function CommunicationHubView() {
                              </button>
                              <button 
                                onClick={(e) => handleDeleteMessage(selectedMessage.id, e as any)}
-                               className="p-4 bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 hover:text-red-500 transition-all"
+                               className={cn("transition-all duration-200 uppercase font-black text-[10px] flex items-center justify-center gap-1.5 rounded-2xl border", deletingMessageId === selectedMessage.id ? "bg-red-600 border-red-700 text-white animate-pulse px-5 py-4" : "p-4 bg-slate-900 border-slate-800 text-slate-400 hover:text-red-500")}
+                               title={deletingMessageId === selectedMessage.id ? "Confirmer la suppression" : "Supprimer définitivement"}
                              >
-                                <Trash2 className="w-5 h-5" />
+                               {deletingMessageId === selectedMessage.id ? "Sûr ?" : <Trash2 className="w-5 h-5" />}
                              </button>
                           </div>
                        </div>
@@ -928,10 +1002,10 @@ export default function CommunicationHubView() {
                       </button>
                       <button 
                         onClick={() => handleDeleteTemplate(tpl.id)}
-                        className="p-2.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
-                        title="Supprimer"
+                        className={cn("transition-all duration-200 uppercase font-black text-[8px] flex items-center justify-center gap-1 rounded-xl", deletingTemplateId === tpl.id ? "bg-red-600 text-white animate-pulse px-4 py-2.5" : "p-2.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white")}
+                        title={deletingTemplateId === tpl.id ? "Confirmer la suppression" : "Supprimer"}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {deletingTemplateId === tpl.id ? "Sûr ?" : <Trash2 className="w-4 h-4" />}
                       </button>
                    </div>
                 </div>
@@ -1000,9 +1074,10 @@ export default function CommunicationHubView() {
                           </div>
                           <button 
                             onClick={() => handleDeleteRule(rule.id)}
-                            className="p-2 text-slate-800 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                            className={cn("p-2 transition-all text-[9px] font-black uppercase flex items-center gap-1", deletingRuleId === rule.id ? "text-red-500 animate-pulse opacity-100" : "text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100")}
+                            title={deletingRuleId === rule.id ? "Confirmer la suppression" : "Supprimer"}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {deletingRuleId === rule.id ? "Sûr ?" : <Trash2 className="w-4 h-4" />}
                           </button>
                        </div>
                     </div>
@@ -1331,12 +1406,12 @@ export default function CommunicationHubView() {
                           <input 
                             type="color"
                             value={formTemplate.brand_color}
-                            onChange={(e) => setFormTemplate({ ...formTemplate, brand_color: e.target.value })}
+                            onChange={(e) => handleBrandColorChange(e.target.value)}
                             className="w-12 h-12 rounded-xl bg-black border border-slate-800 cursor-pointer"
                           />
                           <input 
                             value={formTemplate.brand_color}
-                            onChange={(e) => setFormTemplate({ ...formTemplate, brand_color: e.target.value })}
+                            onChange={(e) => handleBrandColorChange(e.target.value)}
                             className="flex-1 bg-black/50 border border-slate-800 rounded-2xl px-6 py-3 text-[10px] text-white focus:border-purple-500 outline-none transition-all font-mono"
                           />
                        </div>
@@ -1347,12 +1422,12 @@ export default function CommunicationHubView() {
                           <input 
                             type="color"
                             value={formTemplate.accent_color}
-                            onChange={(e) => setFormTemplate({ ...formTemplate, accent_color: e.target.value })}
+                            onChange={(e) => handleAccentColorChange(e.target.value)}
                             className="w-12 h-12 rounded-xl bg-black border border-slate-800 cursor-pointer"
                           />
                           <input 
                             value={formTemplate.accent_color}
-                            onChange={(e) => setFormTemplate({ ...formTemplate, accent_color: e.target.value })}
+                            onChange={(e) => handleAccentColorChange(e.target.value)}
                             className="flex-1 bg-black/50 border border-slate-800 rounded-2xl px-6 py-3 text-[10px] text-white focus:border-purple-500 outline-none transition-all font-mono"
                           />
                        </div>
@@ -1417,7 +1492,7 @@ export default function CommunicationHubView() {
                                   * { max-width: 100%; }
                                 </style>
                               </head>
-                              <body>${formTemplate.body_html || '<p style="color: #999">Aucun contenu à prévisualiser...</p>'}</body>
+                              <body>${getPreviewHtml()}</body>
                             </html>
                           `}
                           className="w-full h-full border-none"

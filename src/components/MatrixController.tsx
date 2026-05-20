@@ -20,7 +20,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
 import { cn } from '../lib/utils';
-import { DEFAULT_NEXUS_CONFIG } from '../constants';
+import { DEFAULT_NEXUS_CONFIG, mergeRegistryConfig } from '../constants';
 
 export default function MatrixController() {
   const [config, setConfig] = useState(DEFAULT_NEXUS_CONFIG);
@@ -39,9 +39,8 @@ export default function MatrixController() {
           ? JSON.parse(settings['nexus_matrix_config']) 
           : settings['nexus_matrix_config'];
         
-        // Error proofing: ensure we merge saved with defaults if structure changed
-        if (saved && saved.categories) {
-           setConfig(saved);
+        if (saved) {
+           setConfig(mergeRegistryConfig(saved));
         }
       }
     } catch (err) {

@@ -43,7 +43,8 @@ import {
   Database,
   BarChart3,
   Menu,
-  X
+  X,
+  ShoppingCart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -53,7 +54,7 @@ import { cn, safeJsonParse } from './lib/utils';
 import { useAuth } from './providers/FirebaseProvider';
 import { firebaseService } from './services/firebaseService';
 import { seedFirebaseDefaults } from './lib/seedFirebase';
-import { DEFAULT_NEXUS_CONFIG } from './constants';
+import { DEFAULT_NEXUS_CONFIG, mergeRegistryConfig } from './constants';
 
 // Components
 import AuditView from './components/AuditView';
@@ -73,6 +74,7 @@ import SmartFeedView from './components/SmartFeedView';
 import SettingsView from './components/SettingsView';
 import PricingView from './components/PricingView';
 import AffiliateView from './components/AffiliateView';
+import WooCommerceManagerView from './components/WooCommerceManagerView';
 import CommunicationHubView from './components/CommunicationHubView';
 import SitesView from './components/SitesView';
 import SuperAdminView from './components/SuperAdminView';
@@ -722,6 +724,7 @@ export default function App() {
     {
       category: 'Catalogue & Admin',
       items: [
+        { id: 'woo-manager', label: 'Commandes & Clients', icon: ShoppingCart },
         { id: 'products', label: 'Manager Produits', icon: Package },
         { id: 'categories', label: 'Catégories & Tags', icon: Tags },
         { id: 'maintenance', label: 'Maintenance', icon: Settings },
@@ -732,7 +735,9 @@ export default function App() {
 
   // Matrix Filter Logic
   const configRaw = settings?.['nexus_matrix_config'];
-  const matrixConfig = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) : DEFAULT_NEXUS_CONFIG;
+  const matrixConfig = configRaw 
+    ? mergeRegistryConfig(typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) 
+    : DEFAULT_NEXUS_CONFIG;
   let userPlanId = subscription?.plan_id || 'none';
   if (userPlanId === 'trial') userPlanId = 'test';
   
@@ -1052,7 +1057,8 @@ export default function App() {
               {activeTab === 'affiliates' && userEmail && <AffiliateView userEmail={userEmail} />}
               {activeTab === 'comm-hub' && <CommunicationHubView />}
               {activeTab === 'forecast' && config && <ForecastView config={config} />}
-              {(activeTab === 'dashboard' || activeTab === 'forecast' || activeTab === 'stock' || activeTab === 'audit' || activeTab === 'content' || activeTab === 'products' || activeTab === 'categories' || activeTab === 'market' || activeTab === 'internal-links' || activeTab === 'maintenance' || activeTab === 'settings' || activeTab === 'smart-feed') && !config && (
+              {activeTab === 'woo-manager' && config && <WooCommerceManagerView config={config} />}
+              {(activeTab === 'dashboard' || activeTab === 'forecast' || activeTab === 'stock' || activeTab === 'audit' || activeTab === 'content' || activeTab === 'products' || activeTab === 'categories' || activeTab === 'market' || activeTab === 'internal-links' || activeTab === 'maintenance' || activeTab === 'settings' || activeTab === 'smart-feed' || activeTab === 'woo-manager') && !config && (
                 <div className="h-[80vh] flex flex-col items-center justify-center text-center">
                   <div className="w-20 h-20 bg-blue-600/10 rounded-3xl flex items-center justify-center mb-8 border border-blue-500/20">
                     <Zap className="w-10 h-10 text-blue-500" />

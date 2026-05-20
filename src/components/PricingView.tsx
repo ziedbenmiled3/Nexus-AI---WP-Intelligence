@@ -20,7 +20,7 @@ import { cn, safeJsonParse } from '../lib/utils';
 import { useAuth } from '../providers/FirebaseProvider';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import ComparisonTable from './ComparisonTable';
-import { DEFAULT_NEXUS_CONFIG } from '../constants';
+import { DEFAULT_NEXUS_CONFIG, mergeRegistryConfig } from '../constants';
 
 const VALID_COUPONS: Record<string, number> = {
   "WELCOME50": 0.50, // -50% discount
@@ -140,12 +140,8 @@ export default function PricingView({ currentSub, settings, onPurchased, setActi
         const currentSettings = (settings && Object.keys(settings).length > 0) ? settings : settingsData;
         const configRaw = currentSettings?.['nexus_matrix_config'];
         let matrixData = configRaw 
-          ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) 
+          ? mergeRegistryConfig(typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) 
           : DEFAULT_NEXUS_CONFIG;
-        
-        if (!matrixData?.categories || !matrixData?.packs) {
-          matrixData = DEFAULT_NEXUS_CONFIG;
-        }
 
         setMatrixConfig(matrixData);
         setPlans(getComputedPlans(matrixData));

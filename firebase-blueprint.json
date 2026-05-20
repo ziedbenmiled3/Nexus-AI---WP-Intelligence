@@ -168,6 +168,31 @@
         "site_url": { "type": "string" }
       },
       "required": ["sender_email", "recipient_email", "subject", "body"]
+    },
+    "mailing_list": {
+      "title": "Mailing List",
+      "description": "Emailing subscription and contact lists",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "user_email": { "type": "string" },
+        "contacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "first_name": { "type": "string" },
+              "last_name": { "type": "string" },
+              "email": { "type": "string" }
+            },
+            "required": ["email"]
+          }
+        },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "user_email", "contacts"]
     }
   },
   "firestore": {
@@ -218,6 +243,10 @@
     "/messages/{messageId}": {
       "schema": "message",
       "description": "Customer communication messages"
+    },
+    "/mailing_lists/{listId}": {
+      "schema": "mailing_list",
+      "description": "Collection of user-defined mailing lists"
     }
   }
 }

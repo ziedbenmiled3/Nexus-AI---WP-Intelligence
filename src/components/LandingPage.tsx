@@ -25,7 +25,7 @@ import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
 import { firebaseService } from '../services/firebaseService';
 import ComparisonTable from './ComparisonTable';
-import { DEFAULT_NEXUS_CONFIG } from '../constants';
+import { DEFAULT_NEXUS_CONFIG, mergeRegistryConfig } from '../constants';
 
 const FALLBACK_PLANS = [
   { id: 'trial', name: 'Test Vision', price: 0, site_limit: 1, description: 'Testez toutes les fonctionnalités pendant 60 minutes' },
@@ -67,12 +67,9 @@ export default function LandingPage({
           : await firebaseService.getSettings();
 
         const configRaw = settingsSource?.['nexus_matrix_config'];
-        let matrixData = configRaw ? (typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) : DEFAULT_NEXUS_CONFIG;
-        
-        // Validation: if categories or packs are missing, use defaults
-        if (!matrixData?.categories || !matrixData?.packs) {
-          matrixData = DEFAULT_NEXUS_CONFIG;
-        }
+        let matrixData = configRaw 
+          ? mergeRegistryConfig(typeof configRaw === 'string' ? safeJsonParse(configRaw, DEFAULT_NEXUS_CONFIG) : configRaw) 
+          : DEFAULT_NEXUS_CONFIG;
 
         setMatrixConfig(matrixData);
 

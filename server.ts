@@ -721,6 +721,185 @@ async function startServer() {
     }
   });
 
+  // --- WOOCOMMERCE INTEGRATION MODULE ---
+  app.get('/api/woocommerce/orders', async (req, res) => {
+    const userEmail = req.headers['x-user-email'] as string;
+    
+    // Extracted WooCommerce credentials from headers or query parameters
+    const wpUrl = (req.headers['x-wp-url'] as string || req.query.url as string || '').trim();
+    const wpUsername = (req.headers['x-wp-username'] as string || req.query.username as string || '').trim();
+    const wpPassword = (req.headers['x-wp-password'] as string || req.query.password as string || '').trim();
+    const consumerKey = (req.headers['x-woocommerce-ck'] as string || req.query.consumer_key as string || '').trim();
+    const consumerSecret = (req.headers['x-woocommerce-cs'] as string || req.query.consumer_secret as string || '').trim();
+    
+    const filterStatus = req.query.status as string; // processing, cancelled, completed, all
+
+    console.log(`[WooCommerce Orders] Fetching orders for user: ${userEmail} on site: ${wpUrl}`);
+    console.log(`[WooCommerce Orders] Filter Status: ${filterStatus}`);
+
+    if (!wpUrl) {
+      return res.status(400).json({ error: 'URL du site WordPress requise (x-wp-url)' });
+    }
+
+    try {
+      // Determine authentication
+      let authHeader = '';
+      if (consumerKey && consumerSecret) {
+        authHeader = 'Basic ' + Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+      } else if (wpUsername && wpPassword) {
+        authHeader = 'Basic ' + Buffer.from(`${wpUsername}:${wpPassword}`).toString('base64');
+      }
+
+      // Map status filter
+      let wcStatus = '';
+      if (filterStatus === 'processing') {
+        wcStatus = 'processing,on-hold';
+      } else if (filterStatus === 'cancelled') {
+        wcStatus = 'cancelled';
+      } else if (filterStatus === 'completed') {
+        wcStatus = 'completed';
+      }
+
+      // Setup request parameters
+      const params: any = {
+        per_page: 50,
+      };
+      if (wcStatus) {
+        params.status = wcStatus;
+      }
+
+      // Build target URL
+      const cleanUrl = wpUrl.replace(/\/$/, '');
+      const apiEndpoint = `${cleanUrl}/wp-json/wc/v3/orders`;
+
+      console.log(`[WooCommerce Orders] Requesting: ${apiEndpoint} with params:`, params);
+
+      const response = await axios.get(apiEndpoint, {
+        headers: {
+          'Authorization': authHeader,
+          'User-Agent': 'Nexus-App/1.0',
+          'Accept': 'application/json'
+        },
+        params,
+        timeout: 20000
+      });
+
+      console.log(`[WooCommerce Orders] Successfully extracted ${response.data?.length || 0} orders.`);
+      res.json(response.data);
+    } catch (error: any) {
+      console.error(`[WooCommerce Orders Error] Failed to fetch orders:`, error.response?.data || error.message);
+      res.status(error.response?.status || 500).json({
+        error: `Impossible de récupérer les commandes WooCommerce. Pourriez-vous vérifier votre configuration ou vos clés API ?`,
+        detail: error.response?.data || error.message
+      });
+    }
+  });
+
+  app.get('/api/woocommerce/customers', async (req, res) => {
+    const userEmail = req.headers['x-user-email'] as string;
+    
+    // Extracted WooCommerce credentials
+    const wpUrl = (req.headers['x-wp-url'] as string || req.query.url as string || '').trim();
+    const wpUsername = (req.headers['x-wp-username'] as string || req.query.username as string || '').trim();
+    const wpPassword = (req.headers['x-wp-password'] as string || req.query.password as string || '').trim();
+    const consumerKey = (req.headers['x-woocommerce-ck'] as string || req.query.consumer_key as string || '').trim();
+    const consumerSecret = (req.headers['x-woocommerce-cs'] as string || req.query.consumer_secret as string || '').trim();
+
+    console.log(`[WooCommerce Customers] Extracting customers for user: ${userEmail} on site: ${wpUrl}`);
+
+    if (!wpUrl) {
+      return res.status(400).json({ error: 'URL du site WordPress requise (x-wp-url)' });
+    }
+
+    try {
+      let authHeader = '';
+      if (consumerKey && consumerSecret) {
+        authHeader = 'Basic ' + Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+      } else if (wpUsername && wpPassword) {
+        authHeader = 'Basic ' + Buffer.from(`${wpUsername}:${wpPassword}`).toString('base64');
+      }
+
+      const cleanUrl = wpUrl.replace(/\/$/, '');
+      const apiEndpointCust = `${cleanUrl}/wp-json/wc/v3/customers`;
+      const apiEndpointOrders = `${cleanUrl}/wp-json/wc/v3/orders`;
+
+      // Fetch customers and orders in parallel for robust client extraction
+      const [custResponse, ordersResponse] = await Promise.allSettled([
+        axios.get(apiEndpointCust, {
+          headers: {
+            'Authorization': authHeader,
+            'User-Agent': 'Nexus-App/1.0',
+            'Accept': 'application/json'
+          },
+          params: { per_page: 100 },
+          timeout: 15000
+        }),
+        axios.get(apiEndpointOrders, {
+          headers: {
+            'Authorization': authHeader,
+            'User-Agent': 'Nexus-App/1.0',
+            'Accept': 'application/json'
+          },
+          params: { per_page: 100 },
+          timeout: 15000
+        })
+      ]);
+
+      const customerMap = new Map<string, any>();
+
+      // 1. Process standard WooCommerce registered customers
+      if (custResponse.status === 'fulfilled') {
+        const rawCustomers = Array.isArray(custResponse.value.data) ? custResponse.value.data : [];
+        for (const cust of rawCustomers) {
+          const email = (cust.email || '').toLowerCase().trim();
+          if (!email) continue;
+          customerMap.set(email, {
+            id: `cust-${cust.id}`,
+            email,
+            last_name: cust.last_name || '',
+            first_name: cust.first_name || '',
+            full_name: `${cust.first_name || ''} ${cust.last_name || ''}`.trim() || cust.username || 'Client',
+          });
+        }
+      } else {
+        console.warn(`[WooCommerce Customers API Error] falling back to orders only:`, custResponse.reason?.message);
+      }
+
+      // 2. Process customer extraction from billing fields in recent Orders (covers guest checkouts!)
+      if (ordersResponse.status === 'fulfilled') {
+        const rawOrders = Array.isArray(ordersResponse.value.data) ? ordersResponse.value.data : [];
+        for (const order of rawOrders) {
+          const billing = order.billing || {};
+          const email = (billing.email || '').toLowerCase().trim();
+          if (!email) continue;
+
+          // If standard role customer is already listed, don't overwrite with billing
+          if (!customerMap.has(email)) {
+            customerMap.set(email, {
+              id: `order-cust-${order.id}`,
+              email,
+              last_name: billing.last_name || '',
+              first_name: billing.first_name || '',
+              full_name: `${billing.first_name || ''} ${billing.last_name || ''}`.trim() || 'Client',
+            });
+          }
+        }
+      } else {
+        console.warn(`[WooCommerce Orders API Error] could not extract from orders:`, ordersResponse.reason?.message);
+      }
+
+      const customers = Array.from(customerMap.values());
+      console.log(`[WooCommerce Customers Unified] Total unique extracted entries: ${customers.length}`);
+      res.json(customers);
+    } catch (error: any) {
+      console.error(`[WooCommerce Customers Error] Failed to fetch:`, error.response?.data || error.message);
+      res.status(error.response?.status || 500).json({
+        error: `Impossible d'extraire la liste des clients WooCommerce.`,
+        detail: error.response?.data || error.message
+      });
+    }
+  });
+
   app.post('/api/imap/sync', async (req, res) => {
     const email = req.headers['x-user-email'] as string;
     if (!email) return res.status(400).json({ error: 'Identification requise' });
@@ -979,7 +1158,7 @@ async function startServer() {
   app.post('/api/comm/send', async (req, res) => {
     const email = req.headers['x-user-email'] as string;
     if (!email) return res.status(400).json({ error: 'Email missing' });
-    const { recipient, subject, body_html, template_id } = req.body;
+    const { recipient, subject, body_html } = req.body;
 
     try {
       const transporter = await getTransporter(email);
@@ -998,30 +1177,6 @@ async function startServer() {
 
       const fromName = settings?.from_name || 'Nexus AI';
       
-      // Look up recipient name if possible
-      let recipientName = 'Client';
-      if (adminApp) {
-        try {
-          const fs = firestoreDatabaseId ? getFirestore(adminApp, firestoreDatabaseId) : getFirestore(adminApp);
-          const userSnap = await fs.collection('users').where('email', '==', recipient.toLowerCase()).limit(1).get();
-          if (!userSnap.empty) {
-            const userData = userSnap.docs[0].data();
-            recipientName = userData.display_name || userData.user_name || recipient.split('@')[0];
-          }
-        } catch (e) {
-          console.warn('[SERVER-SEND] Failed to fetch recipient info:', e.message);
-        }
-      }
-
-      // Basic placeholder replacement
-      let processedBody = body_html;
-      processedBody = processedBody.replace(/\{\{SENDER_NAME\}\}/g, fromName);
-      processedBody = processedBody.replace(/\{\{sender_name\}\}/g, fromName);
-      processedBody = processedBody.replace(/\{\{USER_NAME\}\}/g, recipientName);
-      processedBody = processedBody.replace(/\{\{user_name\}\}/g, recipientName);
-      // Dummy order_id if not provided
-      processedBody = processedBody.replace(/\{\{order_id\}\}/g, 'NXS-' + Math.floor(Math.random()*90000 + 10000));
-      
       const fromEmail = (settings?.from_email && settings.from_email.trim().length > 0) 
         ? settings.from_email.trim() 
         : (settings?.auth_user && settings.auth_user.trim().length > 0)
@@ -1036,80 +1191,122 @@ async function startServer() {
         throw new Error("L'adresse d'expédition (From) n'a pas pu être déterminée. Veuillez configurer vos paramètres SMTP.");
       }
 
-      const info = await transporter.sendMail({
-        from: `"${fromName}" <${fromEmail}>`,
-        to: recipient,
-        subject: subject,
-        html: processedBody
-      });
+      // Turn recipient into standardized list of recipient objects
+      let listDest: any[] = [];
+      if (Array.isArray(recipient)) {
+        listDest = recipient;
+      } else if (typeof recipient === 'object' && recipient !== null) {
+        listDest = [recipient];
+      } else if (typeof recipient === 'string' && recipient.includes(',')) {
+        listDest = recipient.split(',').map(em => ({ email: em.trim() }));
+      } else if (typeof recipient === 'string') {
+        listDest = [{ email: recipient }];
+      }
 
-        // Save to Firestore sent_messages for consultation
+      console.log(`[Publipostage Engine] Commencing send for ${listDest.length} recipients...`);
+      const sentMessageIds: string[] = [];
+
+      for (const dest of listDest) {
+        const destEmail = (dest.email || dest.email_address || dest.adresse_email || '').trim();
+        if (!destEmail) continue;
+
+        const first_name = dest.first_name || dest.prenom || '';
+        const last_name = dest.last_name || dest.nom || '';
+        const customer_name = `${first_name} ${last_name}`.trim() || destEmail.split('@')[0];
+
+        // Format body & subject dynamically
+        let processedSubject = subject || '';
+        let processedBody = body_html || '';
+
+        // French layout tags
+        processedSubject = processedSubject.replace(/\{\{nom\}\}/gi, last_name || first_name || 'Client');
+        processedSubject = processedSubject.replace(/\{\{prenom\}\}/gi, first_name || 'Client');
+        processedBody = processedBody.replace(/\{\{nom\}\}/gi, last_name || first_name || 'Client');
+        processedBody = processedBody.replace(/\{\{prenom\}\}/gi, first_name || 'Client');
+
+        // English/Generic tags
+        processedSubject = processedSubject.replace(/\{\{USER_NAME\}\}/g, customer_name);
+        processedSubject = processedSubject.replace(/\{\{user_name\}\}/g, customer_name);
+        processedBody = processedBody.replace(/\{\{SENDER_NAME\}\}/g, fromName);
+        processedBody = processedBody.replace(/\{\{sender_name\}\}/g, fromName);
+        processedBody = processedBody.replace(/\{\{USER_NAME\}\}/g, customer_name);
+        processedBody = processedBody.replace(/\{\{user_name\}\}/g, customer_name);
+        processedBody = processedBody.replace(/\{\{order_id\}\}/g, 'NXS-' + Math.floor(Math.random()*90000 + 10000));
+
+        console.log(`[Publipostage Engine] Sending to: ${destEmail} (Nom: ${last_name || 'N/A'}, Prénom: ${first_name || 'N/A'})`);
+
+        const info = await transporter.sendMail({
+          from: `"${fromName}" <${fromEmail}>`,
+          to: destEmail,
+          subject: processedSubject,
+          html: processedBody
+        });
+
+        sentMessageIds.push(info.messageId);
+
+        // Save to SQLite logs
+        try {
+          db.prepare('INSERT INTO email_logs (user_email, recipient, subject, status) VALUES (?, ?, ?, ?)').run(email, destEmail, processedSubject, 'sent');
+        } catch (dbErr: any) {
+          console.warn('[Publipostage Engine] SQLite log insertion failed:', dbErr.message);
+        }
+
+        // Save to Firestore asynchronously for UI display
         try {
           const sentMsgData = {
             sender_email: fromEmail,
             user_email: email, 
-            recipient_email: recipient,
-            subject: subject,
-            body: body_html,
+            recipient_email: destEmail,
+            subject: processedSubject,
+            body: processedBody,
             created_at: FieldValue.serverTimestamp(),
             message_id: info.messageId,
             type: 'sent'
           };
 
           let success = false;
-
-          // Attempt 1: Admin SDK with Named Database
+          // Attempt 1: Admin SDK Named DB
           if (adminApp && firestoreDatabaseId) {
             try {
-              console.log('[SEND-EMAIL] Attempting Admin SDK storage (Named DB):', firestoreDatabaseId);
               const fsNamed = getFirestore(adminApp, firestoreDatabaseId);
               await fsNamed.collection('sent_messages').add(sentMsgData);
-              console.log('[SEND-EMAIL] Success (Admin SDK - Named DB)');
               success = true;
             } catch (err: any) {
-              console.warn('[SEND-EMAIL] Admin SDK (Named DB) failed:', err.message);
+              console.warn('[Publipostage-FS1] failed:', err.message);
             }
           }
 
-          // Attempt 2: Admin SDK with Default Database
+          // Attempt 2: Admin SDK Default DB
           if (!success && adminApp) {
             try {
-              console.log('[SEND-EMAIL] Attempting Admin SDK storage (Default DB)...');
               const fsDefault = getFirestore(adminApp);
               await fsDefault.collection('sent_messages').add(sentMsgData);
-              console.log('[SEND-EMAIL] Success (Admin SDK - Default DB)');
               success = true;
             } catch (err: any) {
-              console.warn('[SEND-EMAIL] Admin SDK (Default DB) failed:', err.message);
+              console.warn('[Publipostage-FS2] failed:', err.message);
             }
           }
 
           // Attempt 3: Client SDK (Fallback)
           if (!success && clientDb) {
             try {
-              console.log('[SEND-EMAIL] Attempting Client SDK storage (unauthenticated fallback)...');
               await clientSetDoc(clientDoc(clientDb, 'sent_messages', info.messageId.replace(/[^a-zA-Z0-9]/g, '_')), {
                 ...sentMsgData,
                 created_at: clientServerTimestamp()
               });
-              console.log('[SEND-EMAIL] Success (Client SDK)');
               success = true;
             } catch (err: any) {
-              console.warn('[SEND-EMAIL] Client SDK failed:', err.message);
+              console.warn('[Publipostage-FS3] failed:', err.message);
             }
           }
-
-          if (!success) {
-            console.error('[SEND-EMAIL] All Firestore storage attempts failed.');
-          }
         } catch (saveErr) {
-          console.error('[SEND-EMAIL] Fatal error during storage:', saveErr);
+          console.error('[Publipostage Engine] Firestore logging failed:', saveErr);
         }
+      }
 
-      db.prepare('INSERT INTO email_logs (user_email, recipient, subject, status) VALUES (?, ?, ?, ?)').run(email, recipient, subject, 'sent');
-      res.json({ success: true, messageId: info.messageId });
+      res.json({ success: true, count: sentMessageIds.length, messageIds: sentMessageIds });
     } catch (err: any) {
-      console.error('[SEND-EMAIL-ERROR]:', err.message);
+      console.error('[Publipostage Engine Main Error]:', err.message);
       res.status(500).json({ error: err.message });
     }
   });

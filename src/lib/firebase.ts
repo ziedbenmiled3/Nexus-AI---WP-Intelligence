@@ -5,9 +5,38 @@ import {
   doc, 
   getDocFromServer,
   terminate,
-  clearIndexedDbPersistence
+  clearIndexedDbPersistence,
+  setLogLevel
 } from 'firebase/firestore';
 import localConfig from '../../firebase-applet-config.json';
+
+// Silence verbose internal Firestore SDK console warnings/info logs
+try {
+  setLogLevel('error');
+} catch (e) {
+  console.warn('[Firebase] Failed to set log level:', e);
+}
+
+// Suppress known benign stream cancellation errors to keep the application console pristine
+const originalError = console.error;
+console.error = function (...args: any[]) {
+  const message = args.map(arg => String(arg)).join(' ');
+  if (message.includes('Disconnecting idle stream') || message.includes('CANCELLED') || message.includes('Timed out waiting for new targets')) {
+    // Suppress Firestore benign idle connection timeout warnings
+    return;
+  }
+  originalError.apply(console, args);
+};
+
+const originalWarn = console.warn;
+console.warn = function (...args: any[]) {
+  const message = args.map(arg => String(arg)).join(' ');
+  if (message.includes('Disconnecting idle stream') || message.includes('CANCELLED') || message.includes('Timed out waiting for new targets')) {
+    // Suppress Firestore benign idle connection timeout warnings
+    return;
+  }
+  originalWarn.apply(console, args);
+};
 
 const firebaseConfig = {
   apiKey: (import.meta as any).env.VITE_FIREBASE_API_KEY || localConfig.apiKey,
