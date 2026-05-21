@@ -645,5 +645,78 @@ export const firebaseService = {
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${messageId}`);
     }
+  },
+
+  // Support Tickets API
+  async createSupportTicket(ticket: any) {
+    try {
+      const ticketId = 'ticket_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      const ticketRef = doc(db, 'support_tickets', ticketId);
+      const payload = {
+        ...ticket,
+        id: ticketId,
+        created_at: new Date().toISOString(),
+        status: 'new'
+      };
+      await setDoc(ticketRef, payload);
+      return payload;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `support_tickets`);
+    }
+  },
+
+  async getUserSupportTickets(email: string) {
+    try {
+      const q = query(
+        collection(db, 'support_tickets'),
+        where('user_email', '==', email.toLowerCase())
+      );
+      const snapshot = await getDocs(q);
+      const tickets: any[] = [];
+      snapshot.forEach(docSnap => {
+        tickets.push(docSnap.data());
+      });
+      // Sort in JS to avoid index requirement for multiple fields, or simple creation sorting
+      tickets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return tickets;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'support_tickets');
+    }
+  },
+
+  async getAllSupportTickets() {
+    try {
+      const snapshot = await getDocs(collection(db, 'support_tickets'));
+      const tickets: any[] = [];
+      snapshot.forEach(docSnap => {
+        tickets.push(docSnap.data());
+      });
+      tickets.sort((a, b) => {
+        // Sort active/new tickets first, then by date desc
+        if (a.status === 'new' && b.status !== 'new') return -1;
+        if (a.status !== 'new' && b.status === 'new') return 1;
+        if (a.status === 'processing' && b.status === 'resolved') return -1;
+        if (a.status === 'resolved' && b.status !== 'resolved') return 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+      return tickets;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'support_tickets');
+    }
+  },
+
+  async replyToSupportTicket(ticketId: string, adminReply: string, status: 'processing' | 'resolved') {
+    try {
+      const ticketRef = doc(db, 'support_tickets', ticketId);
+      const updates = {
+        admin_reply: adminReply,
+        status,
+        updated_at: new Date().toISOString()
+      };
+      await setDoc(ticketRef, updates, { merge: true });
+      return { success: true };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `support_tickets/${ticketId}`);
+    }
   }
 };

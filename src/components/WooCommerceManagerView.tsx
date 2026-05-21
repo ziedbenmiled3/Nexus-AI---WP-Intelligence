@@ -107,6 +107,7 @@ export default function WooCommerceManagerView({ config }: WooCommerceManagerVie
   const [campaignSending, setCampaignSending] = useState(false);
   const [campaignSuccess, setCampaignSuccess] = useState<string | null>(null);
   const [campaignError, setCampaignError] = useState<string | null>(null);
+  const [deletingListId, setDeletingListId] = useState<string | null>(null);
 
   // Headers for backend authentication
   const getBackendHeaders = () => {
@@ -266,9 +267,18 @@ export default function WooCommerceManagerView({ config }: WooCommerceManagerVie
 
   // Delete Mailing List from Firestore
   const handleDeleteMailingList = async (listId: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette liste de diffusion ?')) return;
+    if (deletingListId !== listId) {
+      setDeletingListId(listId);
+      // Auto-reset confirmation state after 4 seconds
+      setTimeout(() => {
+        setDeletingListId(prev => prev === listId ? null : prev);
+      }, 4000);
+      return;
+    }
+
     try {
       await deleteDoc(doc(db, 'mailing_lists', listId));
+      setDeletingListId(null);
     } catch (err: any) {
       console.error('Failed to delete list:', err);
       alert('Impossible de supprimer la liste: ' + err.message);
@@ -671,11 +681,20 @@ export default function WooCommerceManagerView({ config }: WooCommerceManagerVie
                         </button>
                         <button 
                           onClick={() => handleDeleteMailingList(list.id)}
-                          className="p-3 bg-red-600/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
-                          title="Supprimer la liste"
+                          className={cn(
+                            "transition-all font-black text-[8px] flex items-center justify-center gap-1.5 rounded-xl border",
+                            deletingListId === list.id 
+                              ? "bg-red-600 border-red-700 text-white animate-pulse px-4 py-3" 
+                              : "p-3 bg-red-600/10 border-transparent text-red-400 hover:bg-red-500 hover:text-white"
+                          )}
+                          title={deletingListId === list.id ? "Confirmer la suppression" : "Supprimer la liste"}
                           id={`list-delete-btn-${list.id}`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {deletingListId === list.id ? (
+                            <span className="flex items-center gap-1">SÛR ?</span>
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
                         </button>
                       </div>
                     </div>

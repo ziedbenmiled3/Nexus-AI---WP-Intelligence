@@ -79,3 +79,18 @@ export interface Customer {
   last_order: string;
   status: 'active' | 'inactive';
 }
+
+export interface SupportTicket {
+  id?: string;
+  user_email: string;
+  subject: string;
+  description: string;
+  category: 'bug' | 'suggestion' | 'connection' | 'other';
+  status: 'new' | 'processing' | 'resolved';
+  active_tab: string;
+  site_url?: string;
+  browser_info?: string;
+  created_at: string;
+  admin_reply?: string;
+  updated_at?: string;
+}

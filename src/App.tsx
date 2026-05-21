@@ -45,11 +45,13 @@ import {
   Menu,
   X,
   ShoppingCart,
-  BookOpen
+  BookOpen,
+  LifeBuoy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 import { WPConfig, WPPost, WPProduct } from './types';
+import SupportTicketsView from './components/SupportTicketsView';
 import { testWPConnection, getPosts, getProducts } from './lib/wordpress';
 import { cn, safeJsonParse } from './lib/utils';
 import { useAuth } from './providers/FirebaseProvider';
@@ -690,6 +692,7 @@ export default function App() {
     { id: 'pricing', label: 'Nexus Plans (Boutique)', icon: Zap },
     { id: 'affiliates', label: t('nav.affiliate'), icon: Users },
     { id: 'guide', label: "📖 Mode d'emploi", icon: BookOpen },
+    { id: 'support', label: "🎫 Ticket Support", icon: LifeBuoy },
   ];
 
   const groupedSiteTabs = [
@@ -1095,6 +1098,7 @@ export default function App() {
               {activeTab === 'sites' && <SitesView currentConfig={config} onSwitch={handleSwitchSite} currentSub={subscription} sites={sites} setSites={setSites} />}
               {activeTab === 'settings' && config && <SettingsView config={config} />}
               {activeTab === 'guide' && <UserManualView />}
+              {activeTab === 'support' && <SupportTicketsView activeTab={activeTab} />}
             </motion.div>
           </AnimatePresence>
 

@@ -193,9 +193,32 @@
         "created_at": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "user_email", "contacts"]
+    },
+    "support_ticket": {
+      "title": "Support Ticket",
+      "description": "User submit tickets for session or technical support",
+      "type": "object",
+      "properties": {
+        "user_email": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["bug", "suggestion", "connection", "other"] },
+        "status": { "type": "string", "enum": ["new", "processing", "resolved"] },
+        "active_tab": { "type": "string" },
+        "site_url": { "type": "string" },
+        "browser_info": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "admin_reply": { "type": "string" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_email", "subject", "description", "category", "status", "active_tab", "created_at"]
     }
   },
   "firestore": {
+    "/support_tickets/{ticketId}": {
+      "schema": "support_ticket",
+      "description": "Collection of user technical support tickets"
+    },
     "/users/{userId}": {
       "schema": "user",
       "description": "System users collection"

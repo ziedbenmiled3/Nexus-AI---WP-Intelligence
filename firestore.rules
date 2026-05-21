@@ -207,6 +207,25 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Support Tickets
+    match /support_tickets/{ticketId} {
+      allow create: if isSignedIn() && 
+                    isAuthEmail(incoming().user_email) &&
+                    incoming().subject is string && incoming().subject.size() <= 200 &&
+                    incoming().description is string && incoming().description.size() <= 5000 &&
+                    incoming().category in ['bug', 'suggestion', 'connection', 'other'] &&
+                    incoming().status == 'new';
+      
+      allow read, list, get: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      
+      allow update: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email) && 
+                                     incoming().diff(existing()).affectedKeys().hasOnly(['subject', 'description', 'category']) &&
+                                     incoming().subject is string && incoming().subject.size() <= 200 &&
+                                     incoming().description is string && incoming().description.size() <= 5000 &&
+                                     incoming().category in ['bug', 'suggestion', 'connection', 'other']);
+      allow delete: if isAdmin();
+    }
+
     // 0. Global Safety Net - Moved to end
     match /{document=**} {
       allow read, write: if false;

@@ -22,7 +22,8 @@ import {
   EyeOff,
   Cpu,
   Sparkles,
-  Command
+  Command,
+  LifeBuoy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
@@ -49,6 +50,12 @@ export default function SuperAdminView({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [siteCount, setSiteCount] = useState(0);
+
+  // Support Tickets States
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [selectedAdminTicket, setSelectedAdminTicket] = useState<any>(null);
+  const [ticketReplyText, setTicketReplyText] = useState('');
+  const [isReplying, setIsReplying] = useState(false);
 
   const [customerSearch, setCustomerSearch] = useState('');
   const [editingPlan, setEditingPlan] = useState<any>(null);
@@ -167,12 +174,13 @@ export default function SuperAdminView({
     setIsLoading(true);
     setError(null);
     try {
-      const [users, pays, settings, sitesData, plansData] = await Promise.all([
+      const [users, pays, settings, sitesData, plansData, ticketsData] = await Promise.all([
         firebaseService.getAllUsers(),
         firebaseService.getAllPayments(),
         firebaseService.getSettings(),
         firebaseService.getSites(user.email!),
-        firebaseService.getPlans()
+        firebaseService.getPlans(),
+        firebaseService.getAllSupportTickets()
       ]);
       
       setSubscribers(users || []);
@@ -181,6 +189,7 @@ export default function SuperAdminView({
       setAnnualDiscount(settings['annual_discount_percentage'] || '20');
       setSiteCount(sitesData?.length || 0);
       setPlans(plansData || []);
+      setTickets(ticketsData || []);
     } catch (err: any) {
       console.error('[Admin] Load error:', err);
       try {
@@ -228,6 +237,25 @@ export default function SuperAdminView({
       setDiscountStatus('error');
     } finally {
       setIsSavingDiscount(false);
+    }
+  };
+
+  const handleReplyTicket = async (ticketId: string, status: 'processing' | 'resolved') => {
+    if (!ticketId || !ticketReplyText.trim()) return;
+    setIsReplying(true);
+    try {
+      if (!user || user.email?.toLowerCase() !== 'ziedbenmiled3@gmail.com') {
+        throw new Error('Not authorized to reply to tickets.');
+      }
+      await firebaseService.replyToSupportTicket(ticketId, ticketReplyText.trim(), status);
+      setTicketReplyText('');
+      setSelectedAdminTicket(null);
+      const updatedTickets = await firebaseService.getAllSupportTickets();
+      setTickets(updatedTickets || []);
+    } catch (err) {
+      console.error('[Admin] Error replying to ticket:', err);
+    } finally {
+      setIsReplying(false);
     }
   };
 
@@ -1146,6 +1174,160 @@ Feature 2"
                       >
                         {isProcessingAction ? <RefreshCw className="w-4 h-4 animate-spin mx-auto" /> : "ENVOYER L'OFFRE"}
                       </button>
+                   </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Support Tickets Section */}
+        <div className="bg-[#0c0e14] border border-slate-800 rounded-[2.5rem] p-10 overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+             <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-indigo-600/20 rounded-xl flex items-center justify-center border border-indigo-500/30">
+                   <LifeBuoy className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div>
+                   <h2 className="text-xl font-black text-white italic uppercase tracking-tighter">Gestion des Tickets de Support</h2>
+                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Remontées d'anomalies de sessions utilisateurs</p>
+                </div>
+             </div>
+             
+             <div className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-[9px] font-black text-indigo-400 uppercase tracking-widest">
+                {tickets.length} Tickets Actifs
+             </div>
+          </div>
+
+          <div className="relative border border-slate-800/50 rounded-3xl overflow-hidden bg-slate-950/20 mb-6 font-sans">
+            <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 z-20 bg-[#0c0e14] border-b border-white/5">
+                  <tr>
+                    <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Client & Catégorie</th>
+                    <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Sujet du Ticket</th>
+                    <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Écran Actif</th>
+                    <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Status</th>
+                    <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {tickets.map((t, idx) => (
+                    <tr key={idx} className="group hover:bg-[#1e1b4b]/30 transition-all">
+                      <td className="px-6 py-5">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] font-bold text-white">{t.user_email}</span>
+                          <span className={cn(
+                            "text-[8px] font-mono uppercase tracking-widest w-fit px-1.5 py-0.5 rounded",
+                            t.category === 'bug' ? "bg-red-500/10 text-red-400" :
+                            t.category === 'suggestion' ? "bg-amber-500/10 text-amber-400" :
+                            t.category === 'connection' ? "bg-blue-500/10 text-blue-400" : "bg-slate-500/10 text-slate-400"
+                          )}>
+                            {t.category}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className="text-[11px] font-semibold text-slate-200 uppercase tracking-tight line-clamp-1">{t.subject}</span>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className="text-[9px] font-mono text-slate-500 uppercase">{t.active_tab || 'Inconnu'}</span>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className={cn(
+                          "text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest",
+                          t.status === 'new' ? "text-blue-500 bg-blue-500/10" :
+                          t.status === 'processing' ? "text-amber-500 bg-amber-500/10 animate-pulse" :
+                          "text-emerald-500 bg-emerald-500/10"
+                        )}>
+                          {t.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 text-right">
+                        <button 
+                          onClick={() => setSelectedAdminTicket(t)}
+                          className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                        >
+                          RÉPONDRE
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {tickets.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-20 text-center">
+                        <div className="flex flex-col items-center gap-3 opacity-20">
+                           <LifeBuoy className="w-10 h-10 text-slate-500" />
+                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Aucun ticket soumis</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Support Reply Modal */}
+        <AnimatePresence>
+          {selectedAdminTicket && (
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md"
+            >
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#0c0e14] border border-indigo-500/30 rounded-[2.5rem] p-10 max-w-lg w-full relative h-[90vh] overflow-y-auto no-scrollbar">
+                <div className="w-16 h-16 bg-indigo-600/20 rounded-2xl flex items-center justify-center mb-6 mx-auto border border-indigo-500/30">
+                   <LifeBuoy className="w-8 h-8 text-indigo-500" />
+                </div>
+                <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter text-center mb-1">RÉPONDRE AU CLIENT</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mb-6">Sujet : <span className="text-white italic">{selectedAdminTicket.subject}</span></p>
+                
+                <div className="space-y-6">
+                   <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl">
+                      <p className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mb-1 pl-1">Description Utilisateur :</p>
+                      <p className="text-xs text-slate-300 font-medium whitespace-pre-wrap leading-relaxed">
+                         {selectedAdminTicket.description}
+                      </p>
+                      <p className="text-[8px] font-mono text-slate-600 uppercase tracking-tight mt-3">Écran actif : {selectedAdminTicket.active_tab} | Nav : {selectedAdminTicket.browser_info?.substring(0, 100)}...</p>
+                   </div>
+
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Message d'orientation ou réponse :</label>
+                      <textarea 
+                        value={ticketReplyText}
+                        onChange={(e) => setTicketReplyText(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-4 text-xs text-white h-24 placeholder:text-slate-700 font-semibold"
+                        placeholder="Rédigez votre réponse ici..."
+                      />
+                   </div>
+
+                   {/* Existing Reply if any */}
+                   {selectedAdminTicket.admin_reply && (
+                      <div className="p-3 bg-indigo-950/30 border border-indigo-800/20 rounded-xl">
+                         <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest mb-1">Réponse actuelle :</p>
+                         <p className="text-[11px] text-slate-300 italic font-medium">{selectedAdminTicket.admin_reply}</p>
+                      </div>
+                   )}
+
+                   <div className="flex flex-col gap-3">
+                      <div className="flex gap-4">
+                        <button 
+                          onClick={() => handleReplyTicket(selectedAdminTicket.id, 'processing')}
+                          disabled={!ticketReplyText.trim() || isReplying}
+                          className="flex-1 py-4 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl disabled:opacity-30"
+                        >
+                           {isReplying ? "CHARGEMENT..." : "EN COURS"}
+                        </button>
+                        <button 
+                          onClick={() => handleReplyTicket(selectedAdminTicket.id, 'resolved')}
+                          disabled={!ticketReplyText.trim() || isReplying}
+                          className="flex-1 py-4 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl disabled:opacity-30"
+                        >
+                           {isReplying ? "CHARGEMENT..." : "RÉSOLU & FERMER"}
+                        </button>
+                      </div>
+                      <button onClick={() => { setSelectedAdminTicket(null); setTicketReplyText(''); }} className="w-full py-4 bg-slate-900 text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest">PLUS TARD / FERMER</button>
                    </div>
                 </div>
               </motion.div>
