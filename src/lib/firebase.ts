@@ -18,24 +18,54 @@ try {
 }
 
 // Suppress known benign stream cancellation errors to keep the application console pristine
+function isBenignFirestoreMessage(args: any[]): boolean {
+  try {
+    const message = args.map(arg => {
+      if (arg && typeof arg === 'object') {
+        try {
+          return JSON.stringify(arg);
+        } catch {
+          return String(arg);
+        }
+      }
+      return String(arg);
+    }).join(' ').toLowerCase();
+
+    return (
+      message.includes('disconnecting idle stream') ||
+      message.includes('cancelled') ||
+      message.includes('timed out waiting for new targets') ||
+      message.includes('grpcconnection') ||
+      message.includes("listen' stream") ||
+      message.includes('firebase/firestore')
+    );
+  } catch {
+    return false;
+  }
+}
+
 const originalError = console.error;
 console.error = function (...args: any[]) {
-  const message = args.map(arg => String(arg)).join(' ');
-  if (message.includes('Disconnecting idle stream') || message.includes('CANCELLED') || message.includes('Timed out waiting for new targets')) {
-    // Suppress Firestore benign idle connection timeout warnings
-    return;
-  }
+  if (isBenignFirestoreMessage(args)) return;
   originalError.apply(console, args);
 };
 
 const originalWarn = console.warn;
 console.warn = function (...args: any[]) {
-  const message = args.map(arg => String(arg)).join(' ');
-  if (message.includes('Disconnecting idle stream') || message.includes('CANCELLED') || message.includes('Timed out waiting for new targets')) {
-    // Suppress Firestore benign idle connection timeout warnings
-    return;
-  }
+  if (isBenignFirestoreMessage(args)) return;
   originalWarn.apply(console, args);
+};
+
+const originalLog = console.log;
+console.log = function (...args: any[]) {
+  if (isBenignFirestoreMessage(args)) return;
+  originalLog.apply(console, args);
+};
+
+const originalInfo = console.info;
+console.info = function (...args: any[]) {
+  if (isBenignFirestoreMessage(args)) return;
+  originalInfo.apply(console, args);
 };
 
 const firebaseConfig = {

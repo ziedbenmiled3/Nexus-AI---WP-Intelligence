@@ -569,6 +569,41 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
           >
             {/* Form Table */}
             <div className="bg-[#0a0c10] border border-slate-800 rounded-[2.5rem] p-10 relative overflow-hidden backdrop-blur-xl">
+               {/* Banner de plugins requis avant connexion */}
+               <div className="mb-8 p-6 bg-blue-500/5 hover:bg-blue-500/[0.08] transition-all border border-blue-500/10 rounded-2xl flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between relative z-10">
+                 <div className="space-y-2 max-w-3xl">
+                   <div className="flex items-center gap-2">
+                     <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                     <h4 className="text-[10px] font-black uppercase text-blue-400 tracking-[0.2em] font-mono">
+                       PLUGINS REQUIS AVANT DE CONNECTER VOTRE SITE
+                     </h4>
+                   </div>
+                   <p className="text-[11px] text-slate-200 font-bold uppercase tracking-wider leading-relaxed">
+                     Pour éviter tout blocage de connexion et assurer le bon fonctionnement de l'IA, veuillez installer et activer :
+                   </p>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                     <div className="bg-slate-950/60 p-3 rounded-lg border border-purple-500/10 flex items-start gap-2">
+                       <span className="text-purple-400 font-mono text-xs font-bold mt-0.5">①</span>
+                       <div className="text-[10px]">
+                         <p className="font-extrabold text-slate-100 uppercase tracking-wider">RankMath SEO / Yoast SEO</p>
+                         <p className="text-slate-400 text-[9px] font-medium leading-normal mt-0.5">Indispensable pour la rédaction et l'analyse automatisée de vos métadonnées SEO par l'IA.</p>
+                       </div>
+                     </div>
+                     <div className="bg-slate-950/60 p-3 rounded-lg border border-amber-500/10 flex items-start gap-2">
+                       <span className="text-amber-400 font-mono text-xs font-bold mt-0.5">②</span>
+                       <div className="text-[10px]">
+                         <p className="font-extrabold text-slate-100 uppercase tracking-wider">WP CORS (CORS Enabling)</p>
+                         <p className="text-slate-400 text-[9px] font-medium leading-normal mt-0.5">Indispensable pour autoriser les échanges d'API REST entre Nexus et votre navigateur sans blocage CORS.</p>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+                 <div className="flex flex-row lg:flex-col gap-2 shrink-0 w-full lg:w-auto">
+                   <span className="flex-1 lg:flex-initial text-center text-[8px] border border-purple-500/20 bg-purple-500/5 text-purple-400 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider">SEO ACTIVE ✓</span>
+                   <span className="flex-1 lg:flex-initial text-center text-[8px] border border-amber-500/20 bg-amber-500/5 text-amber-400 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider">WP CORS CONFIGURED ✓</span>
+                 </div>
+               </div>
+
                <div className="flex gap-4 mb-8">
                   <button 
                     type="button" 
@@ -707,6 +742,88 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]`}
                    {error}
                  </div>
                )}
+            </div>
+
+            {/* Plugins Requis Section */}
+            <div className="bg-[#0b1017] border border-blue-500/10 rounded-[2.5rem] p-10 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                  <Zap className="w-4 h-4 animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase text-white tracking-[0.2em] font-mono">
+                    AUTORISATIONS & PLUGINS WORDPRESS REQUIS
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                    Trois extensions WordPress majeures doivent être installées et actives sur votre WP pour orchestrer l'IA Nexus
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Plugin 1: SEO */}
+                <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-6 flex flex-col justify-between gap-4 hover:border-blue-500/20 transition-all">
+                  <div className="flex gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
+                      <Globe className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-black uppercase text-white tracking-wider">RankMath / Yoast</span>
+                        <span className="bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[8px] px-2 py-0.5 rounded font-black uppercase">Plugin SEO</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed font-bold uppercase tracking-wider">
+                        Donne l'accès aux balises métadonnées. Indispensable pour l'analyse SEO, la rédaction ou l'optimisation des balises méta par le Rédacteur Intelligent.
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-slate-500 font-semibold italic mt-auto">
+                    Recommandé : RankMath SEO ou Yoast SEO.
+                  </p>
+                </div>
+
+                {/* Plugin 2: WP CORS */}
+                <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-6 flex flex-col justify-between gap-4 hover:border-blue-500/20 transition-all">
+                  <div className="flex gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                      <Link className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-black uppercase text-white tracking-wider">WP CORS</span>
+                        <span className="bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] px-2 py-0.5 rounded font-black uppercase">CORS Header</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed font-bold uppercase tracking-wider">
+                        Autorise les échanges d'API REST entre Nexus et votre navigateur. Résout les erreurs de blocage de ressources d'origine croisée.
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-slate-500 font-semibold italic mt-auto">
+                    Requis : Installer l'extension "WP CORS" ou activer les en-têtes Access-Control-Allow-Origin.
+                  </p>
+                </div>
+
+                {/* Plugin 3: WooCommerce */}
+                <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-6 flex flex-col justify-between gap-4 hover:border-blue-500/20 transition-all">
+                  <div className="flex gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                      <Zap className="w-6 h-6 text-amber-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-black uppercase text-white tracking-wider">WooCommerce</span>
+                        <span className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[8px] px-2 py-0.5 rounded font-black uppercase">E-Commerce</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed font-bold uppercase tracking-wider">
+                        Donne l'accès au catalogue e-commerce. Indispensable pour modifier l'inventaire en direct, synchroniser les prix, et optimiser les descriptifs produits.
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-slate-500 font-semibold italic mt-auto">
+                    Requis : API REST de lecture/écriture (R/W) WooCommerce active.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Instruction Footer */}

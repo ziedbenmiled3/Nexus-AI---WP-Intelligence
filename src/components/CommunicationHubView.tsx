@@ -206,6 +206,9 @@ export default function CommunicationHubView() {
         const smsgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setSentMessages(smsgs);
         if (activeFolder === 'sent') setIsLoadingMessages(false);
+      }, (err) => {
+        console.warn('Sent messages query idle or disconnected, Firestore will automatically reconnect:', err);
+        if (activeFolder === 'sent') setIsLoadingMessages(false);
       });
 
     } catch (err) {

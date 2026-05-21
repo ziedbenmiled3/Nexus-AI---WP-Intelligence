@@ -44,7 +44,8 @@ import {
   BarChart3,
   Menu,
   X,
-  ShoppingCart
+  ShoppingCart,
+  BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -86,6 +87,7 @@ import InvitePage from './components/InvitePage';
 import AIChatSupport from './components/AIChatSupport';
 import { EbookPromotion } from './components/EbookPromotion';
 import MandatoryProfileForm from './components/MandatoryProfileForm';
+import UserManualView from './components/UserManualView';
 
 import { useTranslation } from 'react-i18next';
 
@@ -687,6 +689,7 @@ export default function App() {
     { id: 'comm-hub', label: 'Communication Hub', icon: Mail },
     { id: 'pricing', label: 'Nexus Plans (Boutique)', icon: Zap },
     { id: 'affiliates', label: t('nav.affiliate'), icon: Users },
+    { id: 'guide', label: "📖 Mode d'emploi", icon: BookOpen },
   ];
 
   const groupedSiteTabs = [
@@ -1091,6 +1094,7 @@ export default function App() {
               {activeTab === 'vision' && <div className="p-8 text-slate-500 font-black uppercase tracking-widest text-center mt-20">Vision Succès en cours de développement...</div>}
               {activeTab === 'sites' && <SitesView currentConfig={config} onSwitch={handleSwitchSite} currentSub={subscription} sites={sites} setSites={setSites} />}
               {activeTab === 'settings' && config && <SettingsView config={config} />}
+              {activeTab === 'guide' && <UserManualView />}
             </motion.div>
           </AnimatePresence>
 
