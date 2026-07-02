@@ -1,0 +1,261 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // MASTER ADMIN OVERRIDE - Absolute control for primary admins
+    match /{document=**} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.email != null && 
+        (request.auth.token.email.lower() == 'ziedbenmiled3@gmail.com' || 
+         request.auth.token.email.lower() == 'contact@nexuswp.pro');
+    }
+
+    // Messages - Public create & update for system, owner-based read & delete
+    match /messages/{messageId} {
+      allow create, update: if true;
+      allow read, delete: if isAdmin() || (isSignedIn() && resource != null && resource.data.recipient_email != null && resource.data.recipient_email.lower() == request.auth.token.email.lower());
+    }
+
+    // Sent Messages - Allow server-side logging fallback, public create & update
+    match /sent_messages/{messageId} {
+      allow create, update: if true; 
+      allow read, delete: if isAdmin() || (isSignedIn() && resource != null && resource.data.user_email != null && resource.data.user_email.lower() == request.auth.token.email.lower());
+    }
+
+    // --- Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email != null &&
+             (request.auth.token.email.lower() == 'ziedbenmiled3@gmail.com' || 
+              request.auth.token.email.lower() == 'contact@nexuswp.pro');
+    }
+
+    function isAuthEmail(email) {
+      return isSignedIn() && 
+             (email == null || 
+              request.auth.token.email == null || 
+              request.auth.token.email.lower() == email.lower());
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidOrder(data) {
+      return data.id is string &&
+             data.order_number is string &&
+             data.total is number &&
+             data.status in ['pending', 'processing', 'completed', 'cancelled'] &&
+             data.customer_email is string;
+    }
+
+    function isValidCustomer(data) {
+      return data.id is string &&
+             data.email is string &&
+             data.full_name is string;
+    }
+
+    function isValidSubscription(data) {
+      return data.user_email is string &&
+             data.user_email.size() <= 128 &&
+             data.plan_id is string &&
+             data.status in ['active', 'inactive', 'cancelled'];
+    }
+
+    function isValidMessage(data) {
+      return data.sender_email is string &&
+             data.recipient_email is string &&
+             data.subject is string &&
+             data.body is string;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Collections ---
+
+    // Connection test
+    match /system/connection_test {
+      allow read: if true;
+    }
+
+    // Automation Rules
+    match /automation_rules/{ruleId} {
+      allow read, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Threads
+    match /threads/{threadId} {
+      allow read, list: if isAdmin() || (isSignedIn() && (isAuthEmail(resource.data.recipient_email) || isAuthEmail(resource.data.sender_email)));
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Addons
+    match /addons/{addonId} {
+      allow read, list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /addon_purchases/{purchaseId} {
+      allow read: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Plans: Publicly readable (list and get), Admin writeable
+    match /plans/{planId} {
+      allow read, list, get: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Subscriptions: User can read/write their own, Admin all
+    match /subscriptions/{userId} {
+      allow read, get: if isOwner(userId) || isAdmin() || (isSignedIn() && resource.data.user_email.lower() == request.auth.token.email.lower());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.user_email.lower() == request.auth.token.email.lower());
+      allow create: if (isOwner(userId) || isAdmin() || (isSignedIn() && incoming().user_email.lower() == request.auth.token.email.lower())) && isValidSubscription(incoming());
+      allow update: if (isAdmin() || 
+                       (isOwner(userId) && existing().user_email.lower() == request.auth.token.email.lower()) ||
+                       (isSignedIn() && existing().user_email.lower() == request.auth.token.email.lower() && incoming().user_email.lower() == request.auth.token.email.lower())) && isValidSubscription(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Sites: Owner-based access
+    match /sites/{siteId} {
+      allow read, list, get: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      allow create: if isAdmin() || (isSignedIn() && isAuthEmail(incoming().user_email));
+      allow update, delete: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email));
+    }
+
+    // Site Registry: Predictable IDs for uniqueness check
+    match /site_registry/{url} {
+      allow read, get: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email));
+    }
+
+    // Payments: User read their own, Admin write/read
+    match /payments/{paymentId} {
+      allow read, list, get: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      allow create: if isAdmin() || (isSignedIn() && incoming().user_email.lower() == request.auth.token.email.lower());
+      allow update, delete: if isAdmin(); 
+    }
+
+    // Translations: Public read, Admin write
+    match /translations/{translationId} {
+      allow read, list, get: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Settings: Public read (list and get), Admin write
+    match /settings/{settingId} {
+      allow read, list, get: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // SMTP Settings - Owner-based and Admin access
+    match /smtp_settings/{email} {
+      allow read, write: if isAdmin() || (isSignedIn() && request.auth.token.email.lower() == email.lower());
+    }
+
+    // IMAP Settings - Owner-based and Admin access
+    match /imap_settings/{email} {
+      allow read, write: if isAdmin() || (isSignedIn() && request.auth.token.email.lower() == email.lower());
+    }
+
+    // Communication Rules
+    match /communication_rules/{ruleId} {
+      allow read, list, get: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      allow create: if isAdmin() || (isSignedIn() && isAuthEmail(incoming().user_email));
+      allow update, delete: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email));
+    }
+
+    // Email Templates
+    match /email_templates/{templateId} {
+      allow read, list, get: if isAdmin() || (isSignedIn() && (isAuthEmail(resource.data.user_email) || resource.data.user_email == 'admin'));
+      allow create: if isAdmin() || (isSignedIn() && isAuthEmail(incoming().user_email));
+      allow update, delete: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email));
+    }
+    
+    // Admin collection for role checks
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // User Offers
+    match /user_offers/{offerId} {
+      allow read, list: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // WooCommerce Orders
+    match /orders/{orderId} {
+      allow read, list: if isAdmin();
+      allow create: if isAdmin() && isValidOrder(incoming());
+      allow update: if isAdmin() && isValidOrder(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // WooCommerce Customers
+    match /customers/{customerId} {
+      allow read, list: if isAdmin();
+      allow create: if isAdmin() && isValidCustomer(incoming());
+      allow update: if isAdmin() && isValidCustomer(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Mailing Lists
+    match /mailing_lists/{listId} {
+      allow read, list, get: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      allow create: if isAdmin() || (isSignedIn() && isAuthEmail(incoming().user_email));
+      allow update, delete: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email));
+    }
+
+    // Profiles Users
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Support Tickets
+    match /support_tickets/{ticketId} {
+      allow create: if isSignedIn() && 
+                    isAuthEmail(incoming().user_email) &&
+                    incoming().subject is string && incoming().subject.size() <= 200 &&
+                    incoming().description is string && incoming().description.size() <= 5000 &&
+                    incoming().category in ['bug', 'suggestion', 'connection', 'other'] &&
+                    incoming().status == 'new';
+      
+      allow read, list, get: if isAdmin() || (isSignedIn() && isAuthEmail(resource.data.user_email));
+      
+      allow update: if isAdmin() || (isSignedIn() && isAuthEmail(existing().user_email) && 
+                                     incoming().diff(existing()).affectedKeys().hasOnly(['subject', 'description', 'category']) &&
+                                     incoming().subject is string && incoming().subject.size() <= 200 &&
+                                     incoming().description is string && incoming().description.size() <= 5000 &&
+                                     incoming().category in ['bug', 'suggestion', 'connection', 'other']);
+      allow delete: if isAdmin();
+    }
+
+    // 0. Global Safety Net - Moved to end
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Nexus Link - WooCommerce & Dropshipping Bridge",
+  "version": "1.3.0",
+  "description": "Capturez, importez, gérez les variantes dropshipping et transmettez vos commandes vers AliExpress en 1 clic grâce aux ponts Nexus.",
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "*://*.aliexpress.com/*",
+    "*://*.aliexpress.ru/*",
+    "*://*.aliexpress.us/*",
+    "*://*.aliexpress.fr/*",
+    "*://*.aliexpress.es/*",
+    "*://*.aliexpress.it/*",
+    "*://*.nexuswp.pro/*",
+    "*://nexuswp.pro/*",
+    "*://*.run.app/*",
+    "http://localhost/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.aliexpress.com/*",
+        "*://*.aliexpress.ru/*",
+        "*://*.aliexpress.us/*",
+        "*://*.aliexpress.fr/*",
+        "*://*.aliexpress.es/*",
+        "*://*.aliexpress.it/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}

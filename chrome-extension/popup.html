@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #090b0f;
+      color: #f1f5f9;
+      margin: 0;
+      padding: 0;
+      width: 380px;
+      overflow-x: hidden;
+    }
+    
+    .container {
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .logo-container {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #2563eb, #6366f1);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 18px;
+      color: white;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .title-area h1 {
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin: 0;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .title-area p {
+      font-size: 9px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin: 2px 0 0 0;
+    }
+
+    .status-badge {
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-pulse {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #34d399;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+
+    .product-card {
+      background: #0d121f;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 14px;
+      margin-top: 16px;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .product-meta {
+      display: flex;
+      gap: 12px;
+    }
+
+    .product-thumb {
+      width: 64px;
+      height: 64px;
+      border-radius: 10px;
+      object-cover: cover;
+      border: 1px solid #1e293b;
+      background: #04060a;
+    }
+
+    .product-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .product-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin: 0 0 6px 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+
+    .price-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .product-price {
+      font-size: 15px;
+      font-weight: 800;
+      color: #38bdf8;
+    }
+
+    .price-source {
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+    }
+
+    .seller-row {
+      margin-top: 8px;
+      font-size: 10px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 500;
+    }
+
+    .seller-icon {
+      font-size: 11px;
+    }
+
+    .variants-section {
+      margin-top: 12px;
+      border-top: 1px dashed #1e293b;
+      padding-top: 10px;
+    }
+
+    .section-title {
+      font-size: 9px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin: 0 0 6px 0;
+    }
+
+    .tags-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .variant-tag {
+      font-size: 9px;
+      font-weight: bold;
+      background: #111827;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      padding: 3px 7px;
+      border-radius: 6px;
+    }
+
+    .action-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #3b82f6, #4f46e5);
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 14px;
+      cursor: pointer;
+      margin-top: 18px;
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.5);
+    }
+
+    .action-btn:disabled, .action-btn.disabled {
+      background: #1e293b;
+      color: #64748b;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .not-supported {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 24px 10px;
+    }
+
+    .not-supported-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+
+    .not-supported-title {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .not-supported-p {
+      font-size: 10px;
+      color: #64748b;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .instructions {
+      font-size: 9px;
+      color: #475569;
+      text-align: center;
+      margin-top: 14px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo-container">N</div>
+      <div class="title-area">
+        <h1>Nexus Link</h1>
+        <p>Pont WooCommerce & Dropship</p>
+      </div>
+      <div id="statusBadge" class="status-badge">
+        <div class="status-pulse"></div>
+        <span>Prêt</span>
+      </div>
+    </div>
+
+    <!-- Active State for Supported AliExpress page -->
+    <div id="activeState">
+      <div class="product-card">
+        <div class="product-meta">
+          <img id="productThumb" class="product-thumb" src="icons/icon128.png" alt="">
+          <div class="product-info">
+            <h2 id="productTitle" class="product-title">Chargement du produit...</h2>
+            <div class="price-row">
+              <span id="productPrice" class="product-price">-- --</span>
+              <span class="price-source">Scrapé</span>
+            </div>
+            <div class="seller-row">
+              <span class="seller-icon">🏪</span>
+              <span id="sellerName">Vendeur AliExpress</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Variants Showcase inside Popup -->
+        <div id="variantsSection" class="variants-section" style="display: none;">
+          <h3 class="section-title">Variantes & Options Détectées</h3>
+          <div id="variantTags" class="tags-container"></div>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <button id="importBtn" class="action-btn">
+        <span>🚀 Envoyer vers mon Nexus AI</span>
+      </button>
+      
+      <p class="instructions">Ouvrez votre tableau de bord Nexus AI, le produit s'importera instantanément.</p>
+    </div>
+
+    <!-- Fallback State for Unsupported/General pages -->
+    <div id="fallbackState" class="not-supported">
+      <div class="not-supported-icon">🛍️</div>
+      <h3 class="not-supported-title">Page non reconnue</h3>
+      <p class="not-supported-p">Rendez-vous sur n'importe quelle page de produit AliExpress (com, fr, es, uk) pour l'extraire dynamiquement d'un seul clic !</p>
+    </div>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

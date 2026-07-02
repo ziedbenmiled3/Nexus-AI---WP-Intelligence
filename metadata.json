@@ -1,0 +1,11 @@
+{
+  "name": "Nexus-AI---WP-Intelligence",
+  "description": "Plateforme SaaS globale de gestion intelligente pour WordPress et WooCommerce. Audit, optimisation, multi-sites et intelligence marché.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

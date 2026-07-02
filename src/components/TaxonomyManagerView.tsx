@@ -1,0 +1,889 @@
+import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { 
+   Tags as TagsIcon, 
+   Plus, 
+   Search, 
+   Loader2, 
+   ChevronDown, 
+   Trash2, 
+   Edit3, 
+   Eye, 
+   BrainCircuit, 
+   X,
+   CheckCircle2,
+   AlertCircle,
+   Package,
+   Layers,
+   Hash,
+   Sparkles
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { WPConfig } from '../types';
+import { wpFetch } from '../lib/wordpress';
+import ReactMarkdown from 'react-markdown';
+import { geminiQuery } from '../lib/gemini';
+
+interface TaxonomyItem {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  count: number;
+  parent?: number;
+}
+
+interface TaxonomyManagerViewProps {
+  config: WPConfig;
+}
+
+export default function TaxonomyManagerView({ config }: TaxonomyManagerViewProps) {
+  const { i18n } = useTranslation();
+  const isEn = i18n.language?.startsWith('en');
+
+  const [activeType, setActiveType] = useState<'category' | 'tag'>('category');
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<TaxonomyItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState<React.ReactNode | null>(null);
+  
+  // Selection & Actions
+  const [selectedItem, setSelectedItem] = useState<TaxonomyItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [updateLoading, setUpdateLoading] = useState(false);
+  
+  // Create Form State
+  const [newTax, setNewTax] = useState({ name: '', description: '', parent: 0 });
+  const [createLoading, setCreateLoading] = useState(false);
+
+  // AI States
+  const [aiAdvice, setAiAdvice] = useState<string>("");
+  const [pendingActions, setPendingActions] = useState<any[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [applyProgress, setApplyProgress] = useState({ current: 0, total: 0, label: '' });
+  const [showAiModal, setShowAiModal] = useState(false);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const endpoint = activeType === 'category' ? '/wc/v3/products/categories' : '/wc/v3/products/tags';
+      const data = await wpFetch(config, endpoint, 'GET', null, { per_page: 100 });
+      setItems(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error("Taxonomy fetch failed:", err);
+      const status = err.response?.status;
+      const proxyError = err.response?.data?.error;
+      
+      if (status === 404 || (proxyError && proxyError.includes('HTML instead of JSON'))) {
+          setError(
+            <div className="space-y-3 text-left">
+              <div className="flex items-center gap-3 text-red-400 mb-2">
+                <AlertCircle className="w-5 h-5" />
+                <p className="text-sm font-black uppercase tracking-widest">{isEn ? 'WooCommerce API Association Interrupted' : 'Liaison WooCommerce Interrompue'}</p>
+              </div>
+              <div className="bg-red-500/5 border border-red-500/20 p-5 rounded-[2rem] space-y-3">
+                <p className="text-[11px] text-slate-300 font-medium italic">{isEn ? "Nexus cannot retrieve your product taxonomy listings." : "Nexus n'arrive pas à lire vos catégories."}</p>
+                <ul className="list-disc ml-5 text-[10px] text-slate-400 space-y-2 normal-case tracking-normal">
+                  <li><strong className="text-white italic">{isEn ? 'Settings:' : 'Réglages :'}</strong> {isEn ? 'Navigate to Settings > Permalinks and hit "Save Changes" (even if unchanged) to flush the rewrite index.' : 'Allez dans Réglages > Permaliens et cliquez sur "Enregistrer", même sans rien changer.'}</li>
+                  <li><strong className="text-white italic">{isEn ? 'WooCommerce:' : 'WooCommerce :'}</strong> {isEn ? 'Verify in WooCommerce > Settings > Advanced that the REST API protocol is active.' : "Vérifiez dans WooCommerce > Réglages > Avancé que l'API est bien active."}</li>
+                </ul>
+              </div>
+            </div>
+          );
+      } else {
+        setError(isEn ? `Error [${status || 500}]: ${err.message}` : `Erreur [${status || 500}]: ${err.message}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [activeType]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTax.name) return;
+
+    setCreateLoading(true);
+    try {
+      const endpoint = activeType === 'category' ? '/wc/v3/products/categories' : '/wc/v3/products/tags';
+      const payload: any = {
+        name: newTax.name,
+        description: newTax.description
+      };
+      if (activeType === 'category' && newTax.parent > 0) {
+        payload.parent = newTax.parent;
+      }
+
+      await wpFetch(config, endpoint, 'POST', payload);
+      setNewTax({ name: '', description: '', parent: 0 });
+      setIsCreating(false);
+      fetchData();
+    } catch (err: any) {
+      setError(isEn ? `Failed to create elements: ${err.message || 'Unknown error'}` : `Erreur lors de la création : ${err.message || 'Impossible'}`);
+      setTimeout(() => setError(null), 6000);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItem || !selectedItem.name) return;
+
+    console.log('[Taxonomy] Updating:', selectedItem.id, selectedItem.name);
+    setUpdateLoading(true);
+    try {
+      const endpoint = activeType === 'category' 
+        ? `/wc/v3/products/categories/${selectedItem.id}` 
+        : `/wc/v3/products/tags/${selectedItem.id}`;
+      
+      const payload: any = {
+        name: selectedItem.name,
+        description: selectedItem.description
+      };
+      
+      if (activeType === 'category' && typeof selectedItem.parent === 'number') {
+        payload.parent = selectedItem.parent;
+      }
+
+      const res = await wpFetch(config, endpoint, 'PUT', payload);
+      console.log('[Taxonomy] Update Success:', res);
+      setSelectedItem(null);
+      fetchData();
+    } catch (err: any) {
+      console.error('[Taxonomy] Update Error:', err.response?.data || err.message);
+      setError(isEn ? `Update failed: ${err.response?.data?.message || err.message}` : `Erreur de mise à jour : ${err.response?.data?.message || err.message}`);
+      setTimeout(() => setError(null), 6000);
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setIsDeleting(id);
+    try {
+      const endpoint = activeType === 'category' ? `/wc/v3/products/categories/${id}` : `/wc/v3/products/tags/${id}`;
+      await wpFetch(config, endpoint, 'DELETE', null, { force: true });
+      setItems(prev => prev.filter(i => i.id !== id));
+    } catch (err: any) {
+      setError(isEn ? `Deletion failed: ${err.message || 'Action denied'}` : `Erreur lors de la suppression : ${err.message || 'Action impossible'}`);
+      setTimeout(() => setError(null), 6000);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const generateAIAdvice = async () => {
+    if (items.length === 0) return;
+    
+    setIsGenerating(true);
+    setShowAiModal(true);
+    setAiAdvice("");
+    setPendingActions([]);
+    
+    try {
+      const taxonomyData = items.map(i => ({ 
+        id: i.id, 
+        name: i.name, 
+        count: i.count, 
+        description: i.description,
+        parent: i.parent
+      }));
+      const typeLabel = activeType === 'category' ? (isEn ? 'Categories' : 'Catégories') : 'Tags';
+      
+      const prompt = isEn 
+        ? `As an elite SEO and UX expert for e-commerce stores (WooCommerce), analyze my list of ${typeLabel} below.
+        
+Goals:
+1. Detect duplicates or synonyms hurting active SEO score.
+2. Suggest higher-converting search-engine optimized (SEO) alternatives.
+3. Identify orphan leaf nodes (having very few active products).
+4. Propose a better taxonomic tree hierarchy if applicable.
+5. IMPORTANT: For any item (category or tag) that currently has NO description (where the description property is empty, missing, or very short in the data below), you MUST draft a rich, search-engine optimized (SEO) description (max 150-160 characters) and include it as an "update" action in the JSON block below, with the drafted description under the "description" key so that the user can automatically apply it to the WooCommerce store.
+
+IMPORTANT: Your response MUST contain two distinct parts:
+1. A detailed educational Markdown analysis formatted for the end-user.
+2. A JSON code block at the very end, surrounded by \`\`\`json and \`\`\`, describing action structures that I can run programmatically on WooCommerce REST API.
+
+JSON Example format expected:
+\`\`\`json
+{
+  "actions": [
+    { "type": "update", "id": 12, "name": "New Name", "description": "Drafted SEO description here...", "parent": 0 },
+    { "type": "delete", "id": 15 },
+    { "type": "create", "name": "New Category", "description": "Newly crafted SEO description here...", "parent": 10 }
+  ]
+}
+\`\`\`
+
+Strictly use the product category IDs supplied below for your suggestions.
+Data: ${JSON.stringify(taxonomyData)}`
+        : `En tant qu'expert SEO et UX pour e-commerce (WooCommerce), analyse ma liste de ${typeLabel} actuelle.
+      
+Objectifs :
+1. Détecter les doublons ou synonymes qui nuisent au référencement.
+2. Suggérer de nouveaux noms plus porteurs (SEO).
+3. Identifier les structures orphelines (peu de produits).
+4. Proposer une meilleure hiérarchie si nécessaire.
+5. IMPORTANT : Rédige obligatoirement une description pertinente (SEO, max 150-160 caractères) pour CHAQUE élément (catégorie ou étiquette/tag) qui n'en possède pas (dont la propriété "description" est vide, absente ou très courte dans les données fournies ci-dessous). Génère une action de type "update" avec cette description rédigée dans le bloc de code JSON ci-dessous sous la clé "description" pour que nous puissions la synchroniser automatiquement sur le site WooCommerce.
+
+IMPORTANT : Ta réponse doit contenir deux parties :
+1. Une analyse Markdown détaillée et pédagogique pour l'utilisateur.
+2. Un bloc de code JSON à la toute fin, délimité par \`\`\`json et \`\`\`, contenant un tableau d'actions structurées que je peux appliquer via l'API WooCommerce. 
+
+Exemple de format JSON attendu :
+\`\`\`json
+{
+  "actions": [
+    { "type": "update", "id": 12, "name": "Nouveau Nom", "description": "Description hautement optimisée SEO rédigée par l'IA...", "parent": 0 },
+    { "type": "delete", "id": 15 },
+    { "type": "create", "name": "Nouvelle Catégorie", "description": "Description optimisée SEO créée par l'IA...", "parent": 10 }
+  ]
+}
+\`\`\`
+
+Utilise strictement les IDs fournis dans les données suivantes pour tes actions.
+Data: ${JSON.stringify(taxonomyData)}`;
+
+      const res = await geminiQuery({
+        model: "gemini-3-flash-preview", 
+        prompt,
+        systemInstruction: isEn 
+          ? "You are an elite e-commerce SEO and UX advisor. You output accurate analytics and concrete actions in a clean JSON format." 
+          : "Tu és un expert SEO et UX e-commerce. Tu fournis des analyses précises et des actions concrètes au format JSON."
+      }, config.geminiApiKey);
+
+      const text = res.data.text || "";
+      
+      // Extraction du JSON plus robuste
+      const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        try {
+          const jsonContent = JSON.parse(jsonMatch[1].trim());
+          if (jsonContent.actions && Array.isArray(jsonContent.actions)) {
+            setPendingActions(jsonContent.actions);
+          }
+          // Nettoyer l'affichage pour ne pas montrer le JSON brut à l'utilisateur
+          setAiAdvice(text.replace(jsonMatch[0], "").trim());
+        } catch (e) {
+          console.error("Failed to parse AI JSON:", e);
+          setAiAdvice(text);
+        }
+      } else {
+        // Fallback: search for something that looks like JSON if no code blocks
+        const fallbackMatch = text.match(/\{\s*"actions"[\s\S]*?\]\s*\}/);
+        if (fallbackMatch) {
+            try {
+                const jsonContent = JSON.parse(fallbackMatch[0]);
+                if (jsonContent.actions && Array.isArray(jsonContent.actions)) {
+                    setPendingActions(jsonContent.actions);
+                }
+                setAiAdvice(text.replace(fallbackMatch[0], "").trim());
+            } catch (e) {
+                setAiAdvice(text);
+            }
+        } else {
+            setAiAdvice(text || (isEn ? "Sorry, I could not generate the taxonomy analysis at this moment." : "Désolé, je n'ai pas pu générer d'analyse pour le moment."));
+        }
+      }
+    } catch (err: any) {
+      console.error("AI Error:", err);
+      setAiAdvice(isEn ? `AI Error: ${err.message || JSON.stringify(err)}` : `Erreur AI: ${err.message || JSON.stringify(err)}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const applyAiRecommendations = async () => {
+    if (pendingActions.length === 0) return;
+
+    setIsApplying(true);
+    setApplyProgress({ current: 0, total: pendingActions.length, label: isEn ? 'Initializing actions...' : 'Initialisation...' });
+    
+    let successCount = 0;
+    let failCount = 0;
+    const createdIds: Record<string, number> = {};
+
+    try {
+      const endpoint_base = activeType === 'category' ? '/wc/v3/products/categories' : '/wc/v3/products/tags';
+      
+      for (let i = 0; i < pendingActions.length; i++) {
+        const action = pendingActions[i];
+        const actionName = action.name || (action.id ? `ID #${action.id}` : (isEn ? 'element' : 'élément'));
+        setApplyProgress({ 
+            current: i + 1, 
+            total: pendingActions.length, 
+            label: isEn ? `Action ${i+1}/${pendingActions.length}: ${actionName}` : `Action ${i+1}/${pendingActions.length}: ${actionName}` 
+        });
+
+        try {
+          // Parent ID Replacement Logic for hierarchical categories
+          let finalParent = action.parent;
+          if (typeof finalParent === 'string' && createdIds[finalParent]) {
+            finalParent = createdIds[finalParent];
+          } else if (typeof finalParent === 'string') {
+            // Try matching by name if it looks like a placeholder
+            const foundId = Object.entries(createdIds).find(([name]) => 
+              name.toLowerCase() === finalParent.toLowerCase() || 
+              `new_${name.toLowerCase().replace(/\s+/g, '_')}_id` === finalParent.toLowerCase()
+            )?.[1];
+            if (foundId) finalParent = foundId;
+          }
+
+          if (action.type === 'update' && action.id) {
+            const payload: any = {};
+            if (action.name) payload.name = action.name;
+            if (action.description) payload.description = action.description;
+            if (activeType === 'category' && typeof finalParent === 'number') payload.parent = finalParent;
+            
+            await wpFetch(config, `${endpoint_base}/${action.id}`, 'PUT', payload);
+          } else if (action.type === 'delete' && action.id) {
+            await wpFetch(config, `${endpoint_base}/${action.id}`, 'DELETE', null, { force: true });
+          } else if (action.type === 'create' && action.name) {
+            const payload: any = { name: action.name };
+            if (action.description) payload.description = action.description;
+            if (activeType === 'category' && typeof finalParent === 'number') payload.parent = finalParent;
+            
+            const result = await wpFetch(config, endpoint_base, 'POST', payload);
+            if (result && result.id) {
+               createdIds[action.name] = result.id;
+               const slugName = action.name.toLowerCase().replace(/\s+/g, '_');
+               createdIds[`new_${slugName}_id`] = result.id;
+            }
+          }
+          successCount++;
+        } catch (err) {
+          console.error("Action item failed:", action, err);
+          failCount++;
+        }
+      }
+
+      setApplyProgress({ 
+        current: pendingActions.length, 
+        total: pendingActions.length, 
+        label: isEn 
+          ? `Finished! ${successCount} successfully executed${failCount > 0 ? `, ${failCount} failed` : ''}.`
+          : `Terminé ! ${successCount} succès${failCount > 0 ? `, ${failCount} échecs` : ''}.` 
+      });
+      
+      setTimeout(() => {
+        setShowAiModal(false);
+        fetchData();
+      }, 2000);
+    } catch (err: any) {
+      console.error("Critical apply error:", err);
+      setApplyProgress(prev => ({ ...prev, label: isEn ? `Critical Error: ${err.message}` : `Erreur critique : ${err.message}` }));
+      setTimeout(() => setIsApplying(false), 5000);
+    } finally {
+      // Keep state open briefly to acknowledge success/failures
+    }
+  };
+
+  const filteredItems = items.filter(item => 
+    item.name.toLowerCase().includes(search.toLowerCase()) ||
+    item.slug.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-700">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+         <div className="flex items-center gap-5">
+            <div className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-br from-indigo-600 to-indigo-900 border border-indigo-500/30 flex items-center justify-center shadow-2xl shadow-indigo-900/20">
+               <TagsIcon className="w-7 h-7 text-white fill-white shadow-sm" />
+            </div>
+            <div>
+               <h1 className="text-2xl font-black text-white uppercase tracking-tighter leading-none mb-2">{isEn ? 'Taxonomy Management' : 'Gestion des Taxonomies'}</h1>
+               <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                     <CheckCircle2 className="w-3 h-3" />
+                     {items.length} {activeType === 'category' ? (isEn ? 'Categories' : 'Catégories') : 'Tags'} {isEn ? 'synced' : 'synchronisés'}
+                  </span>
+               </div>
+            </div>
+         </div>
+
+         <div className="flex items-center gap-3">
+            <button 
+               onClick={generateAIAdvice}
+               className="px-6 py-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500/20 hover:text-white transition-all flex items-center gap-2 group cursor-pointer"
+            >
+               <BrainCircuit className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+               Nexus Intelligence
+            </button>
+            <button 
+               onClick={() => setIsCreating(true)}
+               className="px-6 py-3 bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            >
+               <Plus className="w-4 h-4" />
+               {isEn ? 'New Element' : 'Nouvel Élément'}
+            </button>
+         </div>
+      </div>
+
+      {/* Tabs & Search */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+         <div className="flex p-1.5 bg-slate-900/50 border border-slate-800 rounded-2xl w-fit">
+            <button 
+               onClick={() => setActiveType('category')}
+               className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${activeType === 'category' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-900/20' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+               {isEn ? 'Categories' : 'Catégories'}
+            </button>
+            <button 
+               onClick={() => setActiveType('tag')}
+               className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${activeType === 'tag' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-900/20' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+               Tags
+            </button>
+         </div>
+
+         <div className="relative flex-1 max-w-md group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
+            <input 
+               type="text" 
+               placeholder={isEn ? 'Search by name or slug...' : 'Chercher par nom ou slug...'}
+               value={search}
+               onChange={(e) => setSearch(e.target.value)}
+               className="w-full bg-[#0a0c10] border border-slate-800/60 rounded-2xl py-3.5 pl-12 pr-6 text-xs font-bold text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all shadow-inner"
+            />
+         </div>
+      </div>
+
+      {/* Content Grid */}
+      {loading ? (
+         <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] animate-pulse">{isEn ? 'Loading Nexus Taxonomies...' : 'Chargement Nexus Taxonomies...'}</p>
+         </div>
+      ) : error ? (
+         <div className="bg-red-500/5 border border-red-500/20 p-8 rounded-3xl flex items-center gap-6">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
+               <AlertCircle className="w-6 h-6 text-red-500" />
+            </div>
+            <div>
+               <p className="text-sm font-black text-red-400 uppercase tracking-widest mb-1">{isEn ? 'Synchronization Error' : 'Erreur de Synchronisation'}</p>
+               <p className="text-[10px] text-red-500/60 font-bold uppercase tracking-widest">{error}</p>
+            </div>
+         </div>
+      ) : (
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <AnimatePresence mode="popLayout">
+               {filteredItems.map((item, idx) => (
+                  <motion.div 
+                     layout
+                     key={item.id}
+                     initial={{ opacity: 0, scale: 0.9 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     exit={{ opacity: 0, scale: 0.9 }}
+                     transition={{ delay: idx * 0.03 }}
+                     className="bg-[#0a0c10] border border-slate-800/60 p-6 rounded-[2rem] hover:border-indigo-500/30 transition-all group relative overflow-hidden"
+                  >
+                     <div className="flex items-start justify-between mb-4 relative z-10">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeType === 'category' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                           {activeType === 'category' ? <Layers className="w-5 h-5" /> : <Hash className="w-5 h-5" />}
+                        </div>
+                        <div className="flex items-center gap-1">
+                           {confirmDeleteId === item.id ? (
+                              <div className="flex items-center gap-1 animate-in fade-in zoom-in-95 duration-200">
+                                 <button 
+                                    onClick={async () => {
+                                       setConfirmDeleteId(null);
+                                       await handleDelete(item.id);
+                                    }}
+                                    className="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-[9px] font-black uppercase"
+                                 >
+                                    {isEn ? 'Yes' : 'Oui'}
+                                 </button>
+                                 <button 
+                                    onClick={() => setConfirmDeleteId(null)}
+                                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-705 text-slate-300 text-[9px] font-black uppercase"
+                                 >
+                                    {isEn ? 'No' : 'Non'}
+                                 </button>
+                              </div>
+                           ) : (
+                              <button 
+                                 onClick={() => setConfirmDeleteId(item.id)}
+                                 disabled={isDeleting === item.id}
+                                 className="p-2 text-slate-600 hover:text-red-500 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                 {isDeleting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                              </button>
+                           )}
+                        </div>
+                     </div>
+
+                     <div className="relative z-10 mb-4">
+                        <h3 className="text-sm font-black text-white uppercase tracking-tight truncate mb-1">{item.name}</h3>
+                        <p className="text-[10px] font-mono text-slate-500">/{item.slug}</p>
+                     </div>
+
+                     <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-900/50 relative z-10">
+                        <div className="flex flex-col">
+                           <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1">{isEn ? 'Products' : 'Produits'}</span>
+                           <span className="text-xs font-black text-indigo-400">{item.count}</span>
+                        </div>
+                        <button 
+                           type="button"
+                           onClick={() => {
+                              console.log('[Taxonomy] Opening Edit Modal for:', item.id);
+                              setSelectedItem(item);
+                           }}
+                           className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 hover:text-white transition-all z-20 cursor-pointer"
+                        >
+                           <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                     </div>
+
+                     {/* Background Pattern */}
+                     <div className="absolute -right-4 -bottom-4 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity pointer-events-none">
+                        {activeType === 'category' ? <Layers className="w-24 h-24" /> : <Hash className="w-24 h-24" />}
+                     </div>
+                  </motion.div>
+               ))}
+            </AnimatePresence>
+            
+            {filteredItems.length === 0 && (
+               <div className="col-span-full py-20 bg-slate-900/20 border border-dashed border-slate-800 rounded-[3rem] flex flex-col items-center justify-center text-center px-6">
+                  <div className="w-16 h-16 rounded-3xl bg-slate-800/50 flex items-center justify-center mb-6">
+                     <Search className="w-8 h-8 text-slate-700" />
+                  </div>
+                  <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-2">{isEn ? 'No results found' : 'Aucun résultat trouvé'}</h3>
+                  <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest max-w-[200px]">{isEn ? 'Try adjusting your search query or switching active tabs.' : "Essaye d'ajuster tes termes de recherche ou de changer de tab."}</p>
+               </div>
+            )}
+         </div>
+      )}
+
+      {/* Create Modal */}
+      <AnimatePresence>
+         {isCreating && (
+            <div className="fixed inset-0 z-[250] flex items-center justify-center p-6">
+               <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsCreating(false)}
+                  className="absolute inset-0 bg-black/80 backdrop-blur-md cursor-pointer"
+               />
+               <motion.div 
+                  key="create-modal-container"
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="relative w-full max-w-lg bg-[#0d0f14] border border-slate-800 shadow-2xl rounded-[3rem] overflow-hidden flex flex-col"
+               >
+                  <div className="p-8 border-b border-slate-800 flex items-center justify-between bg-slate-900/10">
+                     <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                           <Plus className="w-6 h-6" />
+                        </div>
+                        <div>
+                           <h2 className="text-lg font-black text-white uppercase tracking-widest leading-none mb-1">{isEn ? 'New Nexus' : 'Nouveau Nexus'}</h2>
+                           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Type: {activeType === 'category' ? (isEn ? 'Category' : 'Catégorie') : 'Tag'}</p>
+                        </div>
+                     </div>
+                     <button 
+                        onClick={() => setIsCreating(false)}
+                        className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 hover:text-white transition-all cursor-pointer"
+                     >
+                        <X className="w-5 h-5" />
+                     </button>
+                  </div>
+
+                  <form onSubmit={handleCreate}>
+                     <div className="p-10 space-y-6">
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{isEn ? 'Element Name' : "Nom de l'élément"}</label>
+                           <input 
+                              autoFocus
+                              required
+                              type="text" 
+                              value={newTax.name}
+                              onChange={(e) => setNewTax({...newTax, name: e.target.value})}
+                              placeholder="Ex: Nouveautés, Promos..."
+                              className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white placeholder:text-slate-700 focus:outline-none focus:border-indigo-500/50 transition-all"
+                           />
+                        </div>
+
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-right">{isEn ? 'Description (Optional)' : 'Description (Optionnel)'}</label>
+                           <textarea 
+                              rows={3}
+                              value={newTax.description}
+                              onChange={(e) => setNewTax({...newTax, description: e.target.value})}
+                              placeholder={isEn ? 'Describe this item for SEO optimization...' : 'Décrivez cet élément pour le SEO...'}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white placeholder:text-slate-700 focus:outline-none focus:border-indigo-500/50 transition-all resize-none"
+                           />
+                        </div>
+
+                        {activeType === 'category' && items.length > 0 && (
+                           <div className="space-y-3">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{isEn ? 'Parent Category' : 'Catégorie Parente'}</label>
+                              <select 
+                                 value={newTax.parent}
+                                 onChange={(e) => setNewTax({...newTax, parent: parseInt(e.target.value)})}
+                                 className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white focus:outline-none focus:border-indigo-500/50 transition-all appearance-none cursor-pointer"
+                              >
+                                 <option value={0}>{isEn ? 'None (Main Parent)' : 'Aucune (Parent Principal)'}</option>
+                                 {items.filter(i => i.id !== selectedItem?.id).map(i => (
+                                    <option key={i.id} value={i.id}>{i.name}</option>
+                                 ))}
+                              </select>
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="p-8 border-t border-slate-800 bg-slate-900/5 flex gap-3">
+                        <button 
+                           type="button"
+                           onClick={() => setIsCreating(false)}
+                           className="flex-1 py-5 bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] rounded-3xl hover:bg-slate-800 transition-all cursor-pointer"
+                        >
+                           {isEn ? 'Cancel' : 'Annuler'}
+                        </button>
+                        <button 
+                           type="submit"
+                           disabled={createLoading}
+                           className="flex-[2] py-5 bg-white text-black text-[10px] font-black uppercase tracking-[0.2em] rounded-3xl hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 cursor-pointer"
+                        >
+                           {createLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                           {isEn ? `Create ${activeType === 'category' ? 'Category' : 'Tag'}` : `Créer ${activeType === 'category' ? 'Catégorie' : 'Tag'}`}
+                        </button>
+                     </div>
+                  </form>
+               </motion.div>
+            </div>
+         )}
+      </AnimatePresence>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+         {selectedItem && (
+            <div className="fixed inset-0 z-[250] flex items-center justify-center p-6">
+               <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setSelectedItem(null)}
+                  className="absolute inset-0 bg-black/80 backdrop-blur-md cursor-pointer"
+               />
+               <motion.div 
+                  key={`edit-modal-${selectedItem.id}`}
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="relative w-full max-w-lg bg-[#0d0f14] border border-slate-800 shadow-2xl rounded-[3rem] overflow-hidden flex flex-col"
+               >
+                  <div className="p-8 border-b border-slate-800 flex items-center justify-between bg-slate-900/10">
+                     <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                           <Edit3 className="w-6 h-6" />
+                        </div>
+                        <div>
+                           <h2 className="text-lg font-black text-white uppercase tracking-widest leading-none mb-1">{isEn ? 'Edit Nexus' : 'Modifier Nexus'}</h2>
+                           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">ID: {selectedItem.id} | {activeType === 'category' ? (isEn ? 'Category' : 'Catégorie') : 'Tag'}</p>
+                        </div>
+                     </div>
+                     <button 
+                        onClick={() => setSelectedItem(null)}
+                        className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 hover:text-white transition-all cursor-pointer"
+                     >
+                        <X className="w-5 h-5" />
+                     </button>
+                  </div>
+
+                  <form onSubmit={handleUpdate}>
+                     <div className="p-10 space-y-6">
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{isEn ? 'Element Name' : "Nom de l'élément"}</label>
+                           <input 
+                              autoFocus
+                              required
+                              type="text" 
+                              value={selectedItem.name}
+                              onChange={(e) => setSelectedItem({...selectedItem, name: e.target.value})}
+                              placeholder="Ex: Nouveautés, Promos..."
+                              className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white placeholder:text-slate-700 focus:outline-none focus:border-indigo-500/50 transition-all"
+                           />
+                        </div>
+
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-right">{isEn ? 'Description (Optional)' : 'Description (Optionnel)'}</label>
+                           <textarea 
+                              rows={3}
+                              value={selectedItem.description}
+                              onChange={(e) => setSelectedItem({...selectedItem, description: e.target.value})}
+                              placeholder={isEn ? 'Describe this item for SEO optimization...' : 'Décrivez cet élément pour le SEO...'}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white placeholder:text-slate-700 focus:outline-none focus:border-indigo-500/50 transition-all resize-none"
+                           />
+                        </div>
+
+                        {activeType === 'category' && items.length > 0 && (
+                           <div className="space-y-3">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{isEn ? 'Parent Category' : 'Catégorie Parente'}</label>
+                              <select 
+                                 value={selectedItem.parent}
+                                 onChange={(e) => setSelectedItem({...selectedItem, parent: parseInt(e.target.value)})}
+                                 className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 px-6 text-xs font-bold text-white focus:outline-none focus:border-indigo-500/50 transition-all appearance-none cursor-pointer"
+                              >
+                                 <option value={0}>{isEn ? 'None (Main Parent)' : 'Aucune (Parent Principal)'}</option>
+                                 {items.filter(i => i.id !== selectedItem?.id).map(i => (
+                                    <option key={i.id} value={i.id}>{i.name}</option>
+                                 ))}
+                              </select>
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="p-8 border-t border-slate-800 bg-slate-900/5 flex gap-3">
+                        <button 
+                           type="button"
+                           onClick={() => setSelectedItem(null)}
+                           className="flex-1 py-5 bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] rounded-3xl hover:bg-slate-800 transition-all cursor-pointer"
+                        >
+                           {isEn ? 'Cancel' : 'Annuler'}
+                        </button>
+                        <button 
+                           type="submit"
+                           disabled={updateLoading}
+                           className="flex-[2] py-5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-3xl hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 cursor-pointer"
+                        >
+                           {updateLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                           {isEn ? 'Save Modifications' : 'Enregistrer les modifications'}
+                        </button>
+                     </div>
+                  </form>
+               </motion.div>
+            </div>
+         )}
+      </AnimatePresence>
+
+      {/* AI Advice Modal */}
+      <AnimatePresence>
+         {showAiModal && (
+            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+               <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowAiModal(false)}
+                  className="absolute inset-0 bg-black/90 backdrop-blur-xl cursor-pointer"
+               />
+               <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: 30 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 30 }}
+                  className="relative w-full max-w-2xl bg-[#0d0f14] border border-indigo-500/20 shadow-[0_0_100px_rgba(79,70,229,0.15)] rounded-[3rem] overflow-hidden flex flex-col max-h-[85vh]"
+               >
+                  <div className="p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                     <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                           <BrainCircuit className="w-6 h-6 animate-pulse" />
+                        </div>
+                        <div>
+                           <h2 className="text-lg font-black text-white uppercase tracking-widest leading-none mb-1">Nexus Intelligence</h2>
+                           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{isEn ? 'Taxonomy & SEO Optimization' : 'Optimisation Taxonomy & SEO'}</p>
+                        </div>
+                     </div>
+                     <button 
+                        onClick={() => setShowAiModal(false)}
+                        className="p-3 rounded-2xl bg-white/5 text-slate-500 hover:text-white transition-all transform hover:rotate-90 cursor-pointer"
+                     >
+                        <X className="w-5 h-5" />
+                     </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-10 custom-scrollbar prose prose-invert prose-slate max-w-none">
+                     {isGenerating ? (
+                        <div className="flex flex-col items-center justify-center py-20 gap-8">
+                           <div className="relative">
+                              <div className="w-20 h-20 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                 <Sparkles className="w-8 h-8 text-indigo-400 animate-pulse" />
+                              </div>
+                           </div>
+                           <div className="text-center space-y-2">
+                              <p className="text-xl font-black text-white uppercase tracking-tighter">{isEn ? 'Analysis in progress...' : 'Analyse en cours...'}</p>
+                              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em]">{isEn ? 'Nexus AI scanning your taxonomy items' : 'IA Nexus active sur vos taxonomies'}</p>
+                           </div>
+                        </div>
+                     ) : (
+                        <div className="space-y-8">
+                           <div className="markdown-body">
+                              <ReactMarkdown>{aiAdvice}</ReactMarkdown>
+                           </div>
+
+                           {pendingActions.length > 0 && (
+                              <div className="mt-8 space-y-4 pt-8 border-t border-white/5">
+                                 <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    {isEn ? 'Actions Detected' : 'Actions Détectées'} ({pendingActions.length})
+                                 </h3>
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {pendingActions.slice(0, 10).map((action, i) => (
+                                       <div key={i} className="flex items-center gap-3 p-3 bg-slate-900/50 border border-slate-800 rounded-xl">
+                                          <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[8px] font-black ${
+                                                action.type === 'update' ? 'bg-amber-500/10 text-amber-500' :
+                                                action.type === 'create' ? 'bg-emerald-500/10 text-emerald-500' :
+                                                'bg-red-500/10 text-red-500'
+                                             }`}>
+                                             {action.type === 'update' ? 'UP' : action.type === 'create' ? 'NEW' : 'DEL'}
+                                          </div>
+                                          <span className="text-[10px] font-bold text-slate-300 uppercase truncate leading-none">
+                                             {action.name || `ID: ${action.id}`}
+                                          </span>
+                                       </div>
+                                    ))}
+                                    {pendingActions.length > 10 && (
+                                       <div className="p-3 bg-slate-900/20 border border-dashed border-slate-800 rounded-xl flex items-center justify-center">
+                                          <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">+{pendingActions.length - 10} {isEn ? 'other actions' : 'autres actions'}</span>
+                                       </div>
+                                    )}
+                                 </div>
+                              </div>
+                           )}
+                        </div>
+                     )}
+                  </div>
+                  <div className="p-8 border-t border-white/5 bg-white/[0.02]">
+                     {isApplying ? (
+                        <div className="space-y-4">
+                           <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                              <span className="text-indigo-400">{applyProgress.label}</span>
+                              <span className="text-slate-500">{Math.round((applyProgress.current / applyProgress.total) * 100)}%</span>
+                           </div>
+                           <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
+                              <motion.div 
+                                 initial={{ width: 0 }}
+                                 animate={{ width: `${(applyProgress.current / applyProgress.total) * 100}%` }}
+                                 className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400"
+                              />
+                           </div>
+                        </div>
+                     ) : (
+                        <button 
+                           onClick={applyAiRecommendations}
+                           disabled={isGenerating || pendingActions.length === 0}
+                           className="w-full py-5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-3xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group shadow-xl shadow-indigo-900/10 cursor-pointer"
+                        >
+                           <Sparkles className="w-4 h-4 group-hover:scale-125 transition-transform" />
+                           {isEn ? `Apply those ${pendingActions.length} recommendations` : `Appliquer les ${pendingActions.length} recommandations`}
+                        </button>
+                     )}
+                  </div>
+               </motion.div>
+            </div>
+         )}
+      </AnimatePresence>
+    </div>
+  );
+}
