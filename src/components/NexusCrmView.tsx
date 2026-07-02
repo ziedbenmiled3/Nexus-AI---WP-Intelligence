@@ -24,7 +24,8 @@ import {
   AlertTriangle,
   Mail,
   Coins,
-  Trash2
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { useAuth } from '../providers/FirebaseProvider';
 import { firebaseService } from '../services/firebaseService';
@@ -82,6 +83,44 @@ export default function NexusCrmView() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+
+  // User Edit Modal State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<any | null>(null);
+  const [editNom, setEditNom] = useState('');
+  const [editPrenom, setEditPrenom] = useState('');
+  const [editBirthDate, setEditBirthDate] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [isSavingUser, setIsSavingUser] = useState(false);
+
+  const handleSaveUserEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForEdit) return;
+    try {
+      setIsSavingUser(true);
+      await firebaseService.updateUserProfile(selectedUserForEdit.uid, {
+        nom: editNom.trim(),
+        prenom: editPrenom.trim(),
+        birth_date: editBirthDate,
+        phone: editPhone.trim(),
+        address: editAddress.trim(),
+        raw_password: editPassword,
+        display_name: `${editPrenom} ${editNom}`.trim()
+      });
+      showToast('Profil client mis à jour avec succès.', 'success');
+      setIsEditOpen(false);
+      setSelectedUserForEdit(null);
+      await loadNexusData();
+    } catch (err: any) {
+      console.error('Error updating user profile:', err);
+      alert('Erreur lors de la mise à jour du profil : ' + err.message);
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
 
   // Live Connections Simulation
   const [liveSessions, setLiveSessions] = useState<LiveSaaSSession[]>([]);
@@ -695,10 +734,27 @@ export default function NexusCrmView() {
                           const matchedLiveSess = displayedSess.find(s => s.email.toLowerCase() === usr.email?.toLowerCase());
 
                           return (
-                            <tr key={idx} className="hover:bg-slate-950/40 transition-colors">
-                              <td className="p-6 pl-8">
+                            <tr key={idx} className="hover:bg-slate-950/40 transition-colors group/row">
+                              <td 
+                                onClick={() => {
+                                  setSelectedUserForEdit(usr);
+                                  setEditNom(usr.nom || '');
+                                  setEditPrenom(usr.prenom || '');
+                                  setEditBirthDate(usr.birth_date || '');
+                                  setEditPhone(usr.phone || '');
+                                  setEditAddress(usr.address || '');
+                                  setEditEmail(usr.email || '');
+                                  setEditPassword(usr.raw_password || '');
+                                  setIsEditOpen(true);
+                                }}
+                                className="p-6 pl-8 cursor-pointer group-hover/row:text-blue-400 transition-colors"
+                                title="Cliquer pour gérer le profil client et modifier son mot de passe"
+                              >
                                 <div>
-                                  <span className="text-xs font-black text-slate-200 block">{userDisplayName}</span>
+                                  <span className="text-xs font-black text-slate-200 block group-hover/row:text-blue-400 transition-colors flex items-center gap-1.5">
+                                    {userDisplayName}
+                                    <Edit2 className="w-3 h-3 text-slate-600 group-hover/row:text-blue-400 opacity-0 group-hover/row:opacity-100 transition-all" />
+                                  </span>
                                   <span className="text-[10px] text-slate-500 font-mono font-bold">{usr.email}</span>
                                   <span className="text-[8px] font-black text-slate-650 text-indigo-505 block mt-0.5">INSCRIT LE : {createdDate}</span>
                                 </div>
@@ -770,6 +826,23 @@ export default function NexusCrmView() {
                                     title="Offrir un Pack d'Abonnement"
                                   >
                                     <Gift className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedUserForEdit(usr);
+                                      setEditNom(usr.nom || '');
+                                      setEditPrenom(usr.prenom || '');
+                                      setEditBirthDate(usr.birth_date || '');
+                                      setEditPhone(usr.phone || '');
+                                      setEditAddress(usr.address || '');
+                                      setEditEmail(usr.email || '');
+                                      setEditPassword(usr.raw_password || '');
+                                      setIsEditOpen(true);
+                                    }}
+                                    className="p-2.5 bg-indigo-500/10 hover:bg-indigo-500 border border-transparent hover:border-indigo-400 hover:text-white rounded-lg text-indigo-400 transition-all flex items-center justify-center cursor-pointer"
+                                    title="Gérer le profil / Modifier mot de passe"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => {
@@ -1511,6 +1584,122 @@ export default function NexusCrmView() {
                   {isNotifyingLoading ? 'Transmission...' : 'ENVOYER L\'ALERTE'}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Profile Edit / Password Manager Modal */}
+      <AnimatePresence>
+        {isEditOpen && selectedUserForEdit && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0c0e14] border border-blue-500/30 rounded-[2.5rem] p-10 max-w-lg w-full relative shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 bg-blue-600/20 rounded-2xl flex items-center justify-center border border-blue-500/30 mx-auto mb-4 text-blue-400">
+                  <Edit2 className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-white italic uppercase tracking-tighter">Gérer le Profil Client</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                  Email du compte : <span className="text-blue-400 font-mono">{selectedUserForEdit.email}</span>
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveUserEdit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Prénom</label>
+                    <input 
+                      type="text" 
+                      value={editPrenom}
+                      onChange={(e) => setEditPrenom(e.target.value)}
+                      placeholder="Prénom" 
+                      className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:border-blue-600 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Nom</label>
+                    <input 
+                      type="text" 
+                      value={editNom}
+                      onChange={(e) => setEditNom(e.target.value)}
+                      placeholder="Nom" 
+                      className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:border-blue-600 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Date de naissance</label>
+                    <input 
+                      type="date" 
+                      value={editBirthDate}
+                      onChange={(e) => setEditBirthDate(e.target.value)}
+                      className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:border-blue-600 outline-none transition-all [color-scheme:dark]"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Téléphone</label>
+                    <input 
+                      type="tel" 
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="+33 6 ..." 
+                      className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:border-blue-600 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Adresse</label>
+                  <input 
+                    type="text" 
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    placeholder="Adresse complète" 
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:border-blue-600 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2 border-t border-slate-900 pt-4">
+                  <label className="text-[8px] font-black text-amber-500 uppercase tracking-[0.2em] ml-1 flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-amber-500" /> Mot de passe du compte (En clair)
+                  </label>
+                  <input 
+                    type="text" 
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="Entrez un nouveau mot de passe" 
+                    className="w-full bg-black border border-amber-500/20 rounded-xl px-4 py-3 text-xs text-amber-400 font-mono font-bold focus:border-amber-500 outline-none transition-all"
+                  />
+                  <p className="text-[8px] text-slate-500 italic mt-1 leading-normal">
+                    Ce mot de passe est enregistré pour permettre aux administrateurs de le voir ou de le modifier directement à la demande du client.
+                  </p>
+                </div>
+
+                <div className="flex gap-4 pt-4 border-t border-slate-900">
+                  <button 
+                    type="button"
+                    onClick={() => { setIsEditOpen(false); setSelectedUserForEdit(null); }}
+                    className="flex-1 py-3 bg-slate-900 text-slate-400 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest cursor-pointer"
+                    disabled={isSavingUser}
+                  >
+                    Annuler
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isSavingUser}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-45 shadow-lg shadow-blue-950/20 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {isSavingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : "ENREGISTRER"}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

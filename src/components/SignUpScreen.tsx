@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Chrome, 
   Mail, 
+  Lock,
+  User as UserIcon,
+  Calendar,
+  Phone,
+  MapPin,
   ArrowRight, 
   Loader2, 
   ShieldCheck, 
@@ -12,6 +16,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { useAuth } from '../providers/FirebaseProvider';
+import { firebaseService } from '../services/firebaseService';
 
 interface Props {
   onSuccess: (email: string) => void;
@@ -21,7 +26,6 @@ interface Props {
 export default function SignUpScreen({ onSuccess, onBack }: Props) {
   const { i18n } = useTranslation();
   
-  // Clean language handler
   const [lang, setLang] = useState<'fr' | 'en'>(() => {
     const current = i18n.language?.startsWith('en') ? 'en' : 'fr';
     return current;
@@ -35,94 +39,85 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
 
   const isEn = lang === 'en';
 
-  const [isInIframe] = useState(() => {
-    try {
-      return typeof window !== 'undefined' && window.self !== window.top;
-    } catch (e) {
-      return true;
-    }
-  });
-
-  const { loginWithGoogle, loginWithEmail } = useAuth();
+  const { loginWithEmail, signUpWithEmail } = useAuth();
+  
+  // Tab/Mode state: 'signin' or 'signup'
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  
+  // Fields state
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [nom, setNom] = useState('');
+  const [prenom, setPrenom] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<React.ReactNode | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Handle standard Email Sign-In / Registration
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    setError(null);
     const cleanEmail = email.toLowerCase().trim();
-    if (cleanEmail === 'admin') {
-      setError(isEn ? 'Please enter a valid email address' : 'Veuillez saisir une adresse email valide');
+
+    if (!cleanEmail || !password) {
+      setError(isEn ? 'Please fill in all credentials' : 'Veuillez renseigner vos identifiants');
+      return;
+    }
+
+    if (mode === 'signup' && (!nom || !prenom || !birthDate || !phone || !address)) {
+      setError(isEn ? 'Please fill in all registration fields' : 'Veuillez renseigner tous les champs d’inscription');
       return;
     }
 
     setIsLoading(true);
-    setError(null);
 
     try {
-      const user = await loginWithEmail(cleanEmail);
-      const emailToUse = user?.email || cleanEmail;
-      onSuccess(emailToUse);
-    } catch (err: any) {
-      console.error('Email Authentication error:', err);
-      let errMsg: React.ReactNode = err.message || (isEn ? 'Authentication failed' : 'Échec de l\'authentification');
-      if (err.code === 'auth/operation-not-allowed') {
-        errMsg = isEn 
-          ? 'Email login is not enabled in Firebase Auth for this project. Please use the Google Login button.'
-          : 'La connexion par email n\'est pas activée dans Firebase pour ce projet. Veuillez utiliser le bouton de connexion Google.';
-      } else if (err.code === 'auth/email-already-in-use' || err.message?.includes('email-already-in-use')) {
-        errMsg = (
-          <div className="flex flex-col gap-2 items-center text-center">
-            <span className="font-semibold text-red-400">
-              {isEn ? 'Email Already Linked to Google' : 'Email déjà associé à Google'}
-            </span>
-            <span className="text-gray-300">
-              {isEn 
-                ? 'This email address is already registered using Google Sign-In. Please click the Google button above to sign in securely.' 
-                : 'Cette adresse e-mail est déjà associée à votre compte Google. Veuillez cliquer sur le bouton Google ci-dessus pour vous connecter.'}
-            </span>
-          </div>
-        );
-      } else if (err.code === 'auth/network-request-failed' || err.message?.includes('network-request-failed')) {
-        errMsg = isEn
-          ? 'Network connection failed. Please verify your internet connection or disable ad-blockers (such as uBlock Origin or Brave Shields) blocking Google/Firebase.'
-          : 'Échec de la connexion réseau. Veuillez vérifier votre connexion internet ou désactiver vos bloqueurs de publicité (tels que uBlock ou Brave) qui bloquent Google/Firebase.';
-      }
-      setError(errMsg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Google Login via Standard Popup
-  const handleGoogleLogin = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const user = await loginWithGoogle();
-      if (user?.email) {
-        onSuccess(user.email);
+      if (mode === 'signin') {
+        // Sign In Flow
+        console.log('[SignUpScreen] Logging in:', cleanEmail);
+        const loggedUser = await loginWithEmail(cleanEmail, password);
+        // Sync profile with the raw password so it can be recovered/displayed if necessary
+        await firebaseService.syncUserProfile(loggedUser, { raw_password: password });
+        onSuccess(cleanEmail);
+      } else {
+        // Sign Up Flow
+        console.log('[SignUpScreen] Registering new user:', cleanEmail);
+        const registeredUser = await signUpWithEmail(cleanEmail, password);
+        
+        // Sync the profile metadata
+        await firebaseService.syncUserProfile(registeredUser, {
+          nom: nom.trim(),
+          prenom: prenom.trim(),
+          birth_date: birthDate,
+          phone: phone.trim(),
+          address: address.trim(),
+          raw_password: password
+        });
+        
+        onSuccess(cleanEmail);
       }
     } catch (err: any) {
-      console.error('Google Auth Error:', err);
-      let errMsg = err.message || (isEn ? 'Google authentication failed' : 'Échec de l\'authentification Google');
+      console.error('Authentication error:', err);
+      let errMsg = err.message || (isEn ? 'Authentication failed' : 'Échec de l\'authentification');
       
-      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/popup-blocked' || err.message?.includes('popup')) {
-        if (isInIframe) {
-          errMsg = isEn 
-            ? 'Google Auth Popup blocked or closed. Because the app is inside the AI Studio preview iframe, browsers block authentication popups. Please click the "Open in New Tab" icon (top-right of the preview panel) to log in with Google, or use the email activation below.'
-            : 'La fenêtre de connexion Google a été bloquée ou fermée. L\'application étant dans un iframe d\'aperçu AI Studio, les navigateurs bloquent les popups d\'authentification. Veuillez cliquer sur l\'icône "Ouvrir dans un nouvel onglet" (en haut à droite de l\'aperçu) pour vous connecter avec Google, ou utilisez la connexion par e-mail ci-dessous.';
-        } else {
-          errMsg = isEn
-            ? 'The Google Sign-In popup was closed or blocked. Please allow popups for this site and try again.'
-            : 'La fenêtre de connexion Google a été fermée ou bloquée. Veuillez autoriser les fenêtres pop-up pour ce site et réessayer.';
-        }
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        errMsg = isEn 
+          ? 'Incorrect email or password. Please try again.'
+          : 'Email ou mot de passe incorrect. Veuillez réessayer.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        errMsg = isEn 
+          ? 'This email address is already in use by another account.'
+          : 'Cette adresse e-mail est déjà associée à un autre compte.';
+      } else if (err.code === 'auth/weak-password') {
+        errMsg = isEn 
+          ? 'The password is too weak. Please use at least 6 characters.'
+          : 'Le mot de passe est trop faible. Veuillez utiliser au moins 6 caractères.';
       } else if (err.code === 'auth/network-request-failed' || err.message?.includes('network-request-failed')) {
         errMsg = isEn
-          ? 'Network connection failed. Please verify your internet connection or disable ad-blockers (such as uBlock Origin or Brave Shields) blocking Google/Firebase.'
-          : 'Échec de la connexion réseau. Veuillez vérifier votre connexion internet ou désactiver vos bloqueurs de publicité (tels que uBlock ou Brave) qui bloquent Google/Firebase.';
+          ? 'Network connection failed. Please check your internet connection.'
+          : 'Échec de la connexion réseau. Veuillez vérifier votre connexion internet.';
       }
       setError(errMsg);
     } finally {
@@ -141,7 +136,7 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="relative max-w-md w-full bg-gradient-to-b from-[#0c0e14] to-[#06080b] border border-white/5 rounded-[2rem] p-6 sm:p-8 shadow-2xl overflow-hidden"
+        className="relative max-w-lg w-full bg-gradient-to-b from-[#0c0e14] to-[#06080b] border border-white/5 rounded-[2rem] p-6 sm:p-8 shadow-2xl overflow-hidden my-8"
       >
         {/* Glow Line Header */}
         <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
@@ -175,11 +170,41 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
             </div>
             
             <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white leading-none">
-              {isEn ? 'CREATE YOUR ACCOUNT' : 'CRÉER VOTRE COMPTE'}
+              {mode === 'signin' 
+                ? (isEn ? 'SIGN IN' : 'SE CONNECTER')
+                : (isEn ? 'CREATE YOUR ACCOUNT' : 'CRÉER VOTRE COMPTE')
+              }
             </h2>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest max-w-xs mx-auto leading-relaxed">
-              {isEn ? 'Register to activate your ultimate Phase III pack' : 'Enregistrez-vous pour activer votre pack Phase III'}
+              {mode === 'signin'
+                ? (isEn ? 'Access your dashboard' : 'Accédez à votre tableau de bord')
+                : (isEn ? 'Register to activate your ultimate Phase III pack' : 'Enregistrez-vous pour activer votre pack Phase III')
+              }
             </p>
+          </div>
+
+          {/* Selector Switch Mode */}
+          <div className="grid grid-cols-2 p-1 bg-black/40 border border-white/5 rounded-xl">
+            <button
+              onClick={() => { setMode('signin'); setError(null); }}
+              className={`py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                mode === 'signin' 
+                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-400' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isEn ? 'SIGN IN' : 'CONNEXION'}
+            </button>
+            <button
+              onClick={() => { setMode('signup'); setError(null); }}
+              className={`py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                mode === 'signup' 
+                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-400' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isEn ? 'SIGN UP' : 'INSCRIPTION'}
+            </button>
           </div>
 
           {/* Error display */}
@@ -189,89 +214,195 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
-                className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 text-center"
+                className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 text-center font-medium"
               >
                 {error}
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* AUTHENTICATION METHODS CONTAINER */}
-          <div className="space-y-4">
+          {/* FORM */}
+          <form onSubmit={handleSubmit} className="space-y-4">
             
-            {/* Google Login button */}
+            {/* Conditional signup fields */}
+            {mode === 'signup' && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="space-y-4"
+              >
+                {/* Last Name & First Name in 2 columns */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
+                      {isEn ? 'First Name' : 'Prénom'}
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <UserIcon className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                      </div>
+                      <input 
+                        type="text" 
+                        required={mode === 'signup'}
+                        value={prenom}
+                        onChange={(e) => setPrenom(e.target.value)}
+                        placeholder={isEn ? "John" : "Jean"}
+                        disabled={isLoading}
+                        className="w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
+                      {isEn ? 'Last Name' : 'Nom'}
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <UserIcon className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                      </div>
+                      <input 
+                        type="text" 
+                        required={mode === 'signup'}
+                        value={nom}
+                        onChange={(e) => setNom(e.target.value)}
+                        placeholder={isEn ? "Doe" : "Dupont"}
+                        disabled={isLoading}
+                        className="w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Birth Date & Phone Number */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
+                      {isEn ? 'Date of Birth' : 'Date de naissance'}
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Calendar className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                      </div>
+                      <input 
+                        type="date" 
+                        required={mode === 'signup'}
+                        value={birthDate}
+                        onChange={(e) => setBirthDate(e.target.value)}
+                        disabled={isLoading}
+                        className="w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none [color-scheme:dark]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
+                      {isEn ? 'Phone Number' : 'Téléphone'}
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Phone className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                      </div>
+                      <input 
+                        type="tel" 
+                        required={mode === 'signup'}
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="+33 6 12 34 56 78"
+                        disabled={isLoading}
+                        className="w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div className="space-y-1.5">
+                  <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
+                    {isEn ? 'Address' : 'Adresse'}
+                  </label>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <MapPin className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                    </div>
+                    <input 
+                      type="text" 
+                      required={mode === 'signup'}
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder={isEn ? "123 Champs-Élysées, Paris" : "123 Champs-Élysées, Paris"}
+                      disabled={isLoading}
+                      className="w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Email Address */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
+                {isEn ? 'Email Address' : 'Adresse Email'}
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                </div>
+                <input 
+                  type="email" 
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="contact@votre-domaine.com"
+                  disabled={isLoading}
+                  className="w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
+                {isEn ? 'Password' : 'Mot de passe'}
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
+                </div>
+                <input 
+                  type="password" 
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  disabled={isLoading}
+                  minLength={6}
+                  className="w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Submit Button */}
             <button 
-              onClick={handleGoogleLogin}
+              type="submit"
               disabled={isLoading}
-              className="w-full py-4 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 rounded-xl flex items-center justify-center gap-2.5 transition-all text-xs font-bold uppercase tracking-widest text-slate-200 disabled:opacity-50"
+              className="w-full py-4 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-black uppercase tracking-[0.2em] text-[10px] transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-900/10 disabled:opacity-50"
             >
               {isLoading ? (
-                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                  <Chrome className="w-4 h-4 text-blue-400" />
-                  <span>Google</span>
+                  <span>
+                    {mode === 'signin' 
+                      ? (isEn ? 'LOG IN' : 'SE CONNECTER') 
+                      : (isEn ? 'ACTIVATE PRO PACK' : "ACTIVER MON PACK")
+                    }
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
             </button>
-
-            {isInIframe && (
-              <p className="text-[10px] text-blue-400/80 text-center leading-relaxed max-w-xs mx-auto font-medium">
-                {isEn 
-                  ? "💡 Running in Preview: If Google Login fails, please open this app in a new tab (top-right preview icon) or use the Email field below."
-                  : "💡 Mode Aperçu : Si la connexion Google échoue, ouvrez cette application dans un nouvel onglet (icône en haut à droite) ou utilisez l'option Email ci-dessous."
-                }
-              </p>
-            )}
-
-            {/* Separator */}
-            <div className="relative py-2 text-center">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-              <span className="relative flex justify-center text-[8px] uppercase font-black tracking-[0.4em] text-slate-600 bg-[#06080b] px-3">
-                {isEn ? 'OR' : 'OU'}
-              </span>
-            </div>
-
-            {/* Email Form */}
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.25em] px-1">
-                  {isEn ? 'Email Address' : 'Adresse Email'}
-                </label>
-                
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail className="w-4 h-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" />
-                  </div>
-                  <input 
-                    type="email" 
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="contact@votre-domaine.com"
-                    disabled={isLoading}
-                    className="w-full pl-11 pr-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-xs font-bold text-white placeholder:text-slate-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all outline-none disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                disabled={isLoading || !email}
-                className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-black uppercase tracking-[0.2em] text-[10px] transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-900/10 disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <span>{isEn ? 'CONTINUE ACTIVATION' : "CONTINUER L'ACTIVATION"}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
-            </form>
-
-          </div>
+          </form>
 
           {/* Footer Security Notes */}
           <div className="pt-4 border-t border-white/5 flex items-center justify-between text-[8px] font-medium text-slate-600">

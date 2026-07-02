@@ -16,7 +16,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   loginWithGoogle: () => Promise<User>;
-  loginWithEmail: (email: string) => Promise<User>;
+  loginWithEmail: (email: string, password?: string) => Promise<User>;
+  signUpWithEmail: (email: string, password?: string) => Promise<User>;
   logout: () => Promise<void>;
 }
 
@@ -52,19 +53,23 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithEmail = async (email: string): Promise<User> => {
+  const loginWithEmail = async (email: string, password?: string): Promise<User> => {
     const cleanEmail = email.toLowerCase().trim();
-    const deterministicPassword = `nexus_secure_2026_${cleanEmail.replace(/[@.]/g, '_')}`;
+    const finalPassword = password || `nexus_secure_2026_${cleanEmail.replace(/[@.]/g, '_')}`;
 
     try {
       console.log('[FirebaseProvider] Attempting email sign in for:', cleanEmail);
-      const result = await signInWithEmailAndPassword(auth, cleanEmail, deterministicPassword);
+      const result = await signInWithEmailAndPassword(auth, cleanEmail, finalPassword);
       return result.user;
     } catch (signInError: any) {
+      if (password) {
+        // If a custom password was supplied and failed, bubble up the error directly
+        throw signInError;
+      }
       if (signInError.code === 'auth/user-not-found' || signInError.code === 'auth/invalid-credential' || signInError.code === 'auth/wrong-password') {
         try {
-          console.log('[FirebaseProvider] Email not found or invalid, creating user:', cleanEmail);
-          const result = await createUserWithEmailAndPassword(auth, cleanEmail, deterministicPassword);
+          console.log('[FirebaseProvider] Email not found, creating user with legacy pass:', cleanEmail);
+          const result = await createUserWithEmailAndPassword(auth, cleanEmail, finalPassword);
           return result.user;
         } catch (signUpError: any) {
           console.error('[FirebaseProvider] Email sign up failed:', signUpError);
@@ -75,6 +80,14 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
         throw signInError;
       }
     }
+  };
+
+  const signUpWithEmail = async (email: string, password?: string): Promise<User> => {
+    const cleanEmail = email.toLowerCase().trim();
+    const finalPassword = password || `nexus_secure_2026_${cleanEmail.replace(/[@.]/g, '_')}`;
+    console.log('[FirebaseProvider] Attempting email sign up for:', cleanEmail);
+    const result = await createUserWithEmailAndPassword(auth, cleanEmail, finalPassword);
+    return result.user;
   };
 
   const logout = async () => {
@@ -88,7 +101,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginWithEmail, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginWithEmail, signUpWithEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );

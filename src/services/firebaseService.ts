@@ -16,7 +16,7 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 export const firebaseService = {
   // Users
-  async syncUserProfile(user: any) {
+  async syncUserProfile(user: any, extraData?: any) {
     if (!user || !user.email) return;
     try {
       const userRef = doc(db, 'users', user.uid);
@@ -24,11 +24,19 @@ export const firebaseService = {
       const data: any = {
         uid: user.uid,
         email: user.email.toLowerCase().trim(),
-        display_name: user.displayName || '',
+        display_name: user.displayName || (extraData ? `${extraData.prenom || ''} ${extraData.nom || ''}`.trim() : '') || '',
         photo_url: user.photoURL || '',
         last_login: serverTimestamp(),
         updated_at: serverTimestamp()
       };
+
+      if (extraData) {
+        Object.keys(extraData).forEach(key => {
+          if (extraData[key] !== undefined) {
+            data[key] = extraData[key];
+          }
+        });
+      }
 
       await setDoc(userRef, data, { merge: true });
 
