@@ -51,7 +51,8 @@ import {
   Radio,
   CreditCard,
   Coins,
-  Megaphone
+  Megaphone,
+  WifiOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -126,14 +127,22 @@ export default function App() {
     return false;
   });
 
+  const [hasNetworkError, setHasNetworkError] = useState(false);
+
   // Auto-recovery of Firebase Auth state for cached email users
   useEffect(() => {
-    if (!authLoading && !user && userEmail) {
+    if (!authLoading && !user && userEmail && !hasNetworkError) {
       console.log('[App] Restoring Firebase Auth session for cached user:', userEmail);
       setIsRestoringSession(true);
       loginWithEmail(userEmail)
+        .then(() => {
+          setHasNetworkError(false);
+        })
         .catch(err => {
           console.error('[App] Failed to auto-restore Firebase Auth session:', err);
+          if (err.code === 'auth/network-request-failed' || err.message?.includes('network-request-failed')) {
+            setHasNetworkError(true);
+          }
         })
         .finally(() => {
           setIsRestoringSession(false);
@@ -141,7 +150,7 @@ export default function App() {
     } else if (!authLoading) {
       setIsRestoringSession(false);
     }
-  }, [authLoading, user, userEmail]);
+  }, [authLoading, user, userEmail, hasNetworkError]);
 
   const [showLanding, setShowLanding] = useState(() => {
     // Check if we are on the secret lead page route
@@ -1078,6 +1087,54 @@ export default function App() {
       window.location.href = '/';
     }
   };
+
+  if (hasNetworkError) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-6">
+        <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center border border-red-500/20 shadow-lg shadow-red-950/40">
+          <WifiOff className="w-8 h-8 text-red-400" />
+        </div>
+        <div className="space-y-2 max-w-md">
+          <h3 className="text-lg font-bold text-white uppercase tracking-tight">
+            {lang === 'fr' ? 'ÉCHEC DE LA CONNEXION CLOUD' : 'CLOUD CONNECTION FAILED'}
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            {lang === 'fr' 
+              ? "Impossible de contacter les services sécurisés de Firebase. Veuillez vérifier votre connexion internet ou désactiver d'éventuels bloqueurs de pub (uBlock, Brave Shields) bloquant les services Google." 
+              : "Unable to connect to secure Firebase services. Please verify your internet connection or disable any ad-blockers (like uBlock Origin or Brave Shields) blocking Google services."
+            }
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={() => {
+              setHasNetworkError(false);
+              if (userEmail) {
+                setIsRestoringSession(true);
+                loginWithEmail(userEmail)
+                  .then(() => setHasNetworkError(false))
+                  .catch(() => setHasNetworkError(true))
+                  .finally(() => setIsRestoringSession(false));
+              }
+            }}
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all"
+          >
+            {lang === 'fr' ? 'RÉESSAYER' : 'RETRY'}
+          </button>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              setHasNetworkError(false);
+              window.location.href = '/';
+            }}
+            className="px-6 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-black uppercase tracking-widest rounded-lg border border-white/10 transition-all"
+          >
+            {lang === 'fr' ? 'ACCUEIL' : 'GO HOME'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (authLoading || isRestoringSession || (isLoadingSites && !isConnected && !isSuperAdmin)) {
     return (

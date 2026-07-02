@@ -85,6 +85,10 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
             </span>
           </div>
         );
+      } else if (err.code === 'auth/network-request-failed' || err.message?.includes('network-request-failed')) {
+        errMsg = isEn
+          ? 'Network connection failed. Please verify your internet connection or disable ad-blockers (such as uBlock Origin or Brave Shields) blocking Google/Firebase.'
+          : 'Échec de la connexion réseau. Veuillez vérifier votre connexion internet ou désactiver vos bloqueurs de publicité (tels que uBlock ou Brave) qui bloquent Google/Firebase.';
       }
       setError(errMsg);
     } finally {
@@ -115,6 +119,10 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
             ? 'The Google Sign-In popup was closed or blocked. Please allow popups for this site and try again.'
             : 'La fenêtre de connexion Google a été fermée ou bloquée. Veuillez autoriser les fenêtres pop-up pour ce site et réessayer.';
         }
+      } else if (err.code === 'auth/network-request-failed' || err.message?.includes('network-request-failed')) {
+        errMsg = isEn
+          ? 'Network connection failed. Please verify your internet connection or disable ad-blockers (such as uBlock Origin or Brave Shields) blocking Google/Firebase.'
+          : 'Échec de la connexion réseau. Veuillez vérifier votre connexion internet ou désactiver vos bloqueurs de publicité (tels que uBlock ou Brave) qui bloquent Google/Firebase.';
       }
       setError(errMsg);
     } finally {
