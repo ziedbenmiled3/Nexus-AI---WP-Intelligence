@@ -20,11 +20,10 @@ export const firebaseService = {
     if (!user || !user.email) return;
     try {
       const userRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userRef);
       
       const data: any = {
         uid: user.uid,
-        email: user.email.toLowerCase(),
+        email: user.email.toLowerCase().trim(),
         display_name: user.displayName || '',
         photo_url: user.photoURL || '',
         last_login: serverTimestamp(),
@@ -32,6 +31,20 @@ export const firebaseService = {
       };
 
       await setDoc(userRef, data, { merge: true });
+
+      // Clean up stale duplicate user documents with the same email but a different UID
+      const emailLower = user.email.toLowerCase().trim();
+      const q = query(collection(db, 'users'), where('email', '==', emailLower));
+      const querySnap = await getDocs(q);
+      const deletePromises = querySnap.docs
+        .filter(docSnap => docSnap.id !== user.uid)
+        .map(docSnap => {
+          console.log('[Firebase] Cleaning up duplicate stale user profile document:', docSnap.id);
+          return deleteDoc(doc(db, 'users', docSnap.id));
+        });
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+      }
     } catch (error) {
       console.error('[Firebase] Error syncing user profile:', error);
     }
