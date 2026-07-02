@@ -35,6 +35,14 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
 
   const isEn = lang === 'en';
 
+  const [isInIframe] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && window.self !== window.top;
+    } catch (e) {
+      return true;
+    }
+  });
+
   const { loginWithGoogle, loginWithEmail } = useAuth();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -82,7 +90,20 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
       }
     } catch (err: any) {
       console.error('Google Auth Error:', err);
-      setError(err.message || (isEn ? 'Google authentication failed' : 'Échec de l\'authentification Google'));
+      let errMsg = err.message || (isEn ? 'Google authentication failed' : 'Échec de l\'authentification Google');
+      
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/popup-blocked' || err.message?.includes('popup')) {
+        if (isInIframe) {
+          errMsg = isEn 
+            ? 'Google Auth Popup blocked or closed. Because the app is inside the AI Studio preview iframe, browsers block authentication popups. Please click the "Open in New Tab" icon (top-right of the preview panel) to log in with Google, or use the email activation below.'
+            : 'La fenêtre de connexion Google a été bloquée ou fermée. L\'application étant dans un iframe d\'aperçu AI Studio, les navigateurs bloquent les popups d\'authentification. Veuillez cliquer sur l\'icône "Ouvrir dans un nouvel onglet" (en haut à droite de l\'aperçu) pour vous connecter avec Google, ou utilisez la connexion par e-mail ci-dessous.';
+        } else {
+          errMsg = isEn
+            ? 'The Google Sign-In popup was closed or blocked. Please allow popups for this site and try again.'
+            : 'La fenêtre de connexion Google a été fermée ou bloquée. Veuillez autoriser les fenêtres pop-up pour ce site et réessayer.';
+        }
+      }
+      setError(errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -172,6 +193,15 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
                 </>
               )}
             </button>
+
+            {isInIframe && (
+              <p className="text-[10px] text-blue-400/80 text-center leading-relaxed max-w-xs mx-auto font-medium">
+                {isEn 
+                  ? "💡 Running in Preview: If Google Login fails, please open this app in a new tab (top-right preview icon) or use the Email field below."
+                  : "💡 Mode Aperçu : Si la connexion Google échoue, ouvrez cette application dans un nouvel onglet (icône en haut à droite) ou utilisez l'option Email ci-dessous."
+                }
+              </p>
+            )}
 
             {/* Separator */}
             <div className="relative py-2 text-center">
