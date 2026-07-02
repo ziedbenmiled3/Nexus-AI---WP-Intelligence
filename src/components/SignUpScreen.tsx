@@ -46,7 +46,7 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
   const { loginWithGoogle, loginWithEmail } = useAuth();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<React.ReactNode | null>(null);
 
   // Handle standard Email Sign-In / Registration
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -67,11 +67,24 @@ export default function SignUpScreen({ onSuccess, onBack }: Props) {
       onSuccess(emailToUse);
     } catch (err: any) {
       console.error('Email Authentication error:', err);
-      let errMsg = err.message || (isEn ? 'Authentication failed' : 'Échec de l\'authentification');
+      let errMsg: React.ReactNode = err.message || (isEn ? 'Authentication failed' : 'Échec de l\'authentification');
       if (err.code === 'auth/operation-not-allowed') {
         errMsg = isEn 
           ? 'Email login is not enabled in Firebase Auth for this project. Please use the Google Login button.'
           : 'La connexion par email n\'est pas activée dans Firebase pour ce projet. Veuillez utiliser le bouton de connexion Google.';
+      } else if (err.code === 'auth/email-already-in-use' || err.message?.includes('email-already-in-use')) {
+        errMsg = (
+          <div className="flex flex-col gap-2 items-center text-center">
+            <span className="font-semibold text-red-400">
+              {isEn ? 'Email Already Linked to Google' : 'Email déjà associé à Google'}
+            </span>
+            <span className="text-gray-300">
+              {isEn 
+                ? 'This email address is already registered using Google Sign-In. Please click the Google button above to sign in securely.' 
+                : 'Cette adresse e-mail est déjà associée à votre compte Google. Veuillez cliquer sur le bouton Google ci-dessus pour vous connecter.'}
+            </span>
+          </div>
+        );
       }
       setError(errMsg);
     } finally {
