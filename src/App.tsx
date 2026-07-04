@@ -1153,20 +1153,7 @@ export default function App() {
     );
   }
 
-  // Mandatory profile coordinates check if authenticated (skip for super admins and while logging out)
-  if (user && !isProfileComplete && !isCurrentUserSuperAdmin && !isLoggingOut) {
-    return (
-      <MandatoryProfileForm 
-        user={user}
-        initialProfile={userProfile}
-        onSaved={(updatedProfile) => {
-          setUserProfile(updatedProfile);
-          setIsProfileComplete(true);
-        }}
-        onLogout={handleLogout}
-      />
-    );
-  }
+  // Mandatory profile coordinates check if authenticated (removed per user request to bypass the third screen)
 
   // Optional 2FA Validation lock screen blocker when 2FA is active
   if (user && userProfile?.two_factor_enabled && !isTwoFactorVerified) {
