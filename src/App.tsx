@@ -112,6 +112,7 @@ import { useTranslation } from 'react-i18next';
 export default function App() {
   const { t, i18n } = useTranslation();
   const { user, loading: authLoading, loginWithGoogle, loginWithEmail, logout: firebaseLogout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
   const [userEmail, setUserEmail] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -131,6 +132,7 @@ export default function App() {
 
   // Auto-recovery of Firebase Auth state for cached email users
   useEffect(() => {
+    if (isLoggingOut) return;
     if (!authLoading && !user && userEmail && !hasNetworkError) {
       console.log('[App] Restoring Firebase Auth session for cached user:', userEmail);
       setIsRestoringSession(true);
@@ -150,7 +152,7 @@ export default function App() {
     } else if (!authLoading) {
       setIsRestoringSession(false);
     }
-  }, [authLoading, user, userEmail, hasNetworkError]);
+  }, [authLoading, user, userEmail, hasNetworkError, isLoggingOut]);
 
   const [showLanding, setShowLanding] = useState(() => {
     // Check if we are on the secret lead page route
@@ -271,7 +273,7 @@ export default function App() {
     if (!db || !user) return;
 
     const email = (user.email || '').toLowerCase();
-    const isAdminUser = isSuperAdmin || email === 'ziedbenmiled3@gmail.com' || email === 'contact@nexuswp.pro';
+    const isAdminUser = isSuperAdmin || email === 'contact@nexuswp.pro';
 
     if (!isAdminUser) {
       return;
@@ -458,6 +460,7 @@ export default function App() {
 
   // Sync when user becomes available or email is restored from storage
   useEffect(() => {
+    if (isLoggingOut) return;
     if (!user) {
       console.log('[App] No authenticated user yet, skipping sync.');
       return;
@@ -472,7 +475,7 @@ export default function App() {
       return;
     }
 
-    const isDesignatedAdmin = email === 'ziedbenmiled3@gmail.com' || email === 'contact@nexuswp.pro';
+    const isDesignatedAdmin = email === 'contact@nexuswp.pro';
     
     // Prevent data leakage: if new user is different from cached user, clear cache
     const cachedEmail = localStorage.getItem('nexus_user_email');
@@ -614,7 +617,7 @@ export default function App() {
         }
       };
       sync();
-  }, [user, userEmail, authStep]);
+  }, [user, userEmail, authStep, isLoggingOut]);
 
   const [config, setConfig] = useState<WPConfig | null>(() => {
     const saved = localStorage.getItem('wp_config');
@@ -643,7 +646,7 @@ export default function App() {
     setShowLanding(false);
     
     // Super admin bypass
-    if (isSuperAdmin || userEmail === 'ziedbenmiled3@gmail.com') {
+    if (isSuperAdmin || userEmail === 'contact@nexuswp.pro') {
       setAuthStep('none');
       setActiveTab('dashboard');
       return;
@@ -663,7 +666,7 @@ export default function App() {
     localStorage.setItem('nexus_user_email', email);
     
     // Immediate Super Admin bypass
-    const isAdmin = email === 'ziedbenmiled3@gmail.com' || email === 'contact@nexuswp.pro';
+    const isAdmin = email === 'contact@nexuswp.pro';
     setIsSuperAdmin(isAdmin);
     if (isAdmin) {
       setAuthStep('none');
@@ -841,7 +844,7 @@ export default function App() {
   
   // Subscription state
   const [subscription, setSubscription] = useState<any>(null);
-  const SUPER_ADMIN_EMAIL = 'ziedbenmiled3@gmail.com';
+  const SUPER_ADMIN_EMAIL = 'contact@nexuswp.pro';
 
   // Check if first-time user has visited pricing yet (scoped per user profile to prevent cross-account leakage)
   const [hasVisitedPricing, setHasVisitedPricing] = useState(false);
@@ -860,10 +863,11 @@ export default function App() {
 
   // Sync super admin state
   useEffect(() => {
+    if (isLoggingOut) return;
     const email = user?.email?.toLowerCase() || userEmail?.toLowerCase();
     
     // STRICT SECURITY RULE: Only designated primary accounts can be super admin
-    if (email === 'ziedbenmiled3@gmail.com' || email === 'contact@nexuswp.pro') {
+    if (email === 'contact@nexuswp.pro') {
       setIsSuperAdmin(true);
       localStorage.setItem('nexus_super_key', 'nexus_master_2026');
     } else {
@@ -872,7 +876,7 @@ export default function App() {
       localStorage.removeItem('nexus_super_key');
       localStorage.removeItem('admin_clicks');
     }
-  }, [user, userEmail]);
+  }, [user, userEmail, isLoggingOut]);
 
   const handleLogoClick = () => {
     // Normal navigation
@@ -880,7 +884,7 @@ export default function App() {
     
     // Only allow secret activator for the real owner if they lost it
     const email = user?.email?.toLowerCase() || userEmail?.toLowerCase();
-    if (email !== 'ziedbenmiled3@gmail.com' && email !== 'contact@nexuswp.pro') return;
+    if (email !== 'contact@nexuswp.pro') return;
 
     const clicks = parseInt(localStorage.getItem('admin_clicks') || '0') + 1;
     if (clicks >= 5) {
@@ -1064,6 +1068,7 @@ export default function App() {
 
   const handleLogout = async () => {
     console.log('[App] Handing Logout');
+    setIsLoggingOut(true);
     try {
       // Clear storage first to be responsive
       localStorage.clear();
@@ -1076,6 +1081,7 @@ export default function App() {
       setIsSuperAdmin(false);
       setUserEmail(null);
       setSites([]);
+      setIsProfileComplete(false);
       
       await firebaseLogout();
       
@@ -1136,7 +1142,9 @@ export default function App() {
     );
   }
 
-  if (authLoading || isRestoringSession || (isLoadingSites && !isConnected && !isSuperAdmin)) {
+  const isCurrentUserSuperAdmin = isSuperAdmin || user?.email?.toLowerCase() === 'contact@nexuswp.pro' || userEmail?.toLowerCase() === 'contact@nexuswp.pro';
+
+  if (authLoading || isRestoringSession || isLoggingOut || (isLoadingSites && !isConnected && !isCurrentUserSuperAdmin)) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
          <Zap className="w-12 h-12 text-blue-500 animate-pulse mb-4" />
@@ -1145,8 +1153,8 @@ export default function App() {
     );
   }
 
-  // Mandatory profile coordinates check if authenticated
-  if (user && !isProfileComplete) {
+  // Mandatory profile coordinates check if authenticated (skip for super admins and while logging out)
+  if (user && !isProfileComplete && !isCurrentUserSuperAdmin && !isLoggingOut) {
     return (
       <MandatoryProfileForm 
         user={user}

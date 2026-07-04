@@ -66,7 +66,7 @@ export default function CollaborationView() {
   };
 
   const [members, setMembers] = useState<TeamMember[]>([
-    { id: '1', name: 'Zied Ben Miled', email: 'ziedbenmiled3@gmail.com', role: 'admin', status: 'active', invitedAt: '2026-01-10T12:00:00Z' }
+    { id: '1', name: 'Administrateur Principal', email: 'contact@nexuswp.pro', role: 'admin', status: 'active', invitedAt: '2026-01-10T12:00:00Z' }
   ]);
   const [invites, setInvites] = useState<TeamMember[]>([
     { id: 'inv1', name: 'Sarah Dubois', email: 'sarah.dubois@nexuswp.pro', role: 'seo', status: 'pending', invitedAt: '2026-05-28T14:30:00Z' },
@@ -316,7 +316,7 @@ export default function CollaborationView() {
                           })}
                         </td>
                         <td className="py-4 text-right">
-                          {member.email.toLowerCase() !== 'ziedbenmiled3@gmail.com' ? (
+                          {member.email.toLowerCase() !== 'contact@nexuswp.pro' ? (
                             <button 
                               onClick={() => handleRemoveMember(member.id, false)}
                               className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"

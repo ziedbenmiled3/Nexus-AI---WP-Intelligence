@@ -637,8 +637,8 @@ try {
 
     db.transaction(() => {
       insertLog.run(
-        'ziedbenmiled3@gmail.com',
-        'Zied Benmiled',
+        'collaborateur@nexuswp.pro',
+        'Collaborateur Nexus',
         '2026-06-14 11:24:12',
         1450,
         'Hub de Communication - Config SMTP',

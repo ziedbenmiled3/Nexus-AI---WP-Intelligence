@@ -16,7 +16,7 @@ export const DEFAULT_PLANS = [
 
 export async function seedFirebaseDefaults(user?: any, force = false) {
   try {
-    const adminEmail = 'ziedbenmiled3@gmail.com';
+    const adminEmail = 'contact@nexuswp.pro';
     const effectiveUser = user || auth.currentUser;
     
     console.log('[Firebase] Seeding started...', { force });

@@ -219,7 +219,7 @@ export default function AffiliateView({ userEmail, plans }: { userEmail: string;
   const currentLang = i18n.language && i18n.language.startsWith('en') ? 'en' : 'fr';
   const tl = (key: keyof typeof TRANSLATIONS['fr']) => TRANSLATIONS[currentLang][key];
 
-  const [isAdmin, setIsAdmin] = useState(userEmail === 'ziedbenmiled3@gmail.com');
+  const [isAdmin, setIsAdmin] = useState(userEmail === 'contact@nexuswp.pro');
   const [activeMode, setActiveMode] = useState<'user' | 'admin'>(isAdmin ? 'admin' : 'user');
   const [profile, setProfile] = useState<AffiliateProfile | null>(null);
   const [referrals, setReferrals] = useState<any[]>([]);

@@ -25,7 +25,7 @@ import { cn } from '../lib/utils';
 
 export default function PaypalConfigView() {
   const { user } = useAuth();
-  const isSuperAdmin = user?.email?.toLowerCase() === 'ziedbenmiled3@gmail.com' || user?.email?.toLowerCase() === 'contact@nexuswp.pro';
+  const isSuperAdmin = user?.email?.toLowerCase() === 'contact@nexuswp.pro';
   const [paypalClientId, setPaypalClientId] = useState('');
   const [paypalTestMode, setPaypalTestMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);

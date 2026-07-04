@@ -53,7 +53,7 @@ export default function SitesView({
   const [geminiStatus, setGeminiStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showScriptPopup, setShowScriptPopup] = useState(false);
 
-  const isAdminUser = userEmail?.toLowerCase() === 'ziedbenmiled3@gmail.com' || userEmail?.toLowerCase() === 'contact@nexuswp.pro';
+  const isAdminUser = userEmail?.toLowerCase() === 'contact@nexuswp.pro';
   const siteLimit = isAdminUser ? 100 : (currentSub?.site_limit || 0);
   const isLimitReached = siteLimit !== -1 && (siteLimit === 0 || sites.length >= siteLimit);
 

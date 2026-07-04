@@ -48,7 +48,7 @@ interface LiveSaaSSession {
 export default function NexusCrmView() {
   const { user } = useAuth();
   const userEmail = user?.email || '';
-  const isAdmin = userEmail.toLowerCase() === 'ziedbenmiled3@gmail.com' || userEmail.toLowerCase() === 'contact@nexuswp.pro';
+  const isAdmin = userEmail.toLowerCase() === 'contact@nexuswp.pro';
 
   // State
   const [crmTab, setCrmTab] = useState<'users' | 'billing' | 'live'>('users');
@@ -463,7 +463,7 @@ export default function NexusCrmView() {
   const handleDeleteUser = (userItem: any) => {
     const targetEmail = userItem.email || userItem.user_email;
     if (!targetEmail) return;
-    const isMasterAdmin = targetEmail.toLowerCase() === 'ziedbenmiled3@gmail.com' || targetEmail.toLowerCase() === 'contact@nexuswp.pro';
+    const isMasterAdmin = targetEmail.toLowerCase() === 'contact@nexuswp.pro';
     if (isMasterAdmin) {
       alert("Erreur de protocole : Un compte Administrateur Principal ne peut pas être supprimé.");
       return;
@@ -521,7 +521,7 @@ export default function NexusCrmView() {
           </div>
 
           <p className="text-slate-400 text-xs leading-relaxed max-w-lg mx-auto font-medium">
-            Seul le compte administrateur principal (<strong className="text-white">ziedbenmiled3@gmail.com</strong>) est authentifié 
+            Seul le compte administrateur principal (<strong className="text-white">contact@nexuswp.pro</strong>) est authentifié 
             pour examiner le fichier des utilisateurs inscrits sur la SaaS Nexus, octroyer des privilèges VIP et interagir avec les sessions en direct.
           </p>
 

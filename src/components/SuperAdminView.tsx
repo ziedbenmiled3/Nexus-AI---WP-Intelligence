@@ -46,7 +46,7 @@ export default function SuperAdminView({
   const { t } = useTranslation();
   const { user } = useAuth();
   const userEmail = user?.email || localStorage.getItem('nexus_user_email');
-  const isMasterAdminUser = userEmail?.toLowerCase() === 'ziedbenmiled3@gmail.com' || userEmail?.toLowerCase() === 'contact@nexuswp.pro';
+  const isMasterAdminUser = userEmail?.toLowerCase() === 'contact@nexuswp.pro';
   const [subscribers, setSubscribers] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
@@ -388,7 +388,7 @@ export default function SuperAdminView({
   const handleDeleteUser = (userItem: any) => {
     const targetEmail = userItem.email || userItem.user_email;
     if (!targetEmail) return;
-    const isMasterAdmin = targetEmail.toLowerCase() === 'ziedbenmiled3@gmail.com' || targetEmail.toLowerCase() === 'contact@nexuswp.pro';
+    const isMasterAdmin = targetEmail.toLowerCase() === 'contact@nexuswp.pro';
     if (isMasterAdmin) {
       alert("Erreur de protocole : Un compte Administrateur Principal ne peut pas être supprimé.");
       return;

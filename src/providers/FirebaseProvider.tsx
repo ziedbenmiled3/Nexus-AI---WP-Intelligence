@@ -55,13 +55,27 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithEmail = async (email: string, password?: string): Promise<User> => {
     const cleanEmail = email.toLowerCase().trim();
-    const finalPassword = password || `nexus_secure_2026_${cleanEmail.replace(/[@.]/g, '_')}`;
+    const defaultPassword = `nexus_secure_2026_${cleanEmail.replace(/[@.]/g, '_')}`;
+    const finalPassword = password || defaultPassword;
 
     try {
       console.log('[FirebaseProvider] Attempting email sign in for:', cleanEmail);
       const result = await signInWithEmailAndPassword(auth, cleanEmail, finalPassword);
       return result.user;
     } catch (signInError: any) {
+      const isDesignatedAdmin = cleanEmail === 'contact@nexuswp.pro';
+      
+      // If an admin typed a custom password and it failed, attempt using their master key as fallback
+      if (password && isDesignatedAdmin && password !== defaultPassword) {
+        try {
+          console.log('[FirebaseProvider] Admin custom password failed, trying master fallback password...');
+          const result = await signInWithEmailAndPassword(auth, cleanEmail, defaultPassword);
+          return result.user;
+        } catch (fallbackError) {
+          throw signInError;
+        }
+      }
+
       if (password) {
         // If a custom password was supplied and failed, bubble up the error directly
         throw signInError;

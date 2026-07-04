@@ -127,7 +127,7 @@ interface ImapSettings {
 export default function CommunicationHubView({ config }: CommunicationHubViewProps) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
-  const isSuperAdmin = user?.email?.toLowerCase() === 'ziedbenmiled3@gmail.com' || user?.email?.toLowerCase() === 'contact@nexuswp.pro';
+  const isSuperAdmin = user?.email?.toLowerCase() === 'contact@nexuswp.pro';
   const [activeTab, setActiveTab ] = useState<Tab>('inbox');
   
   // Inbox State
